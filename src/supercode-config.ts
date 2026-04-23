@@ -1,18 +1,10 @@
 import { existsSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import type { AgentConfigBindings } from "./agents/types"
 
 export type SupercodeConfig = {
-  agent?: {
-    orchestrator?: {
-      enabled?: boolean
-      model?: string
-      variant?: string
-      color?: string
-      temperature?: number
-      permission?: Record<string, AgentPermissionRule>
-    }
-  }
+  agent?: AgentConfigBindings
   mcp?: {
     websearch?: {
       apiKey?: string
@@ -81,7 +73,7 @@ function normalizeAgentPermission(value: unknown): Record<string, AgentPermissio
     : undefined
 }
 
-function normalizeOrchestratorBinding(entry: unknown) {
+function normalizeAgentBinding(entry: unknown) {
   if (!isRecord(entry)) return undefined
 
   const permission = normalizeAgentPermission(entry.permission)
@@ -109,11 +101,15 @@ function normalizeSupercodeConfig(value: unknown): SupercodeConfig {
   const normalizedConfig: SupercodeConfig = {}
 
   const agent = isRecord(value.agent) ? value.agent : undefined
-  const orchestrator = agent ? normalizeOrchestratorBinding(agent.orchestrator) : undefined
-
-  if (orchestrator) {
-    normalizedConfig.agent = {
-      orchestrator,
+  if (agent) {
+    const normalizedAgent: AgentConfigBindings = {}
+    for (const [name, entry] of Object.entries(agent)) {
+      const normalizedEntry = normalizeAgentBinding(entry)
+      if (!normalizedEntry) continue
+      normalizedAgent[name] = normalizedEntry
+    }
+    if (Object.keys(normalizedAgent).length > 0) {
+      normalizedConfig.agent = normalizedAgent
     }
   }
 

@@ -7,7 +7,7 @@ TypeScript-based OpenCode plugin scaffold with:
 - bundled built-in skills under `src/skills/`
 - a rebuilt tool registry with stable public tool names
 - built-in MCP registration for the bundled MCP surface
-- a built-in orchestrator agent with `supercode.json` model overrides
+- built-in agents with automatic `*.agent.ts` registration and `supercode.json` model overrides
 
 ## Structure
 
@@ -68,23 +68,34 @@ The plugin entry itself is minimal:
 3. `src/tools/` contains the tool implementations
 4. `src/mcp/` contains the built-in MCP registry
 5. `src/skills/` contains built-in skill files and skill-path registration logic
-6. `src/agents/` contains the built-in orchestrator definition and prompt
+6. `src/agents/` contains built-in agent definitions, prompts, and registry logic
 
-## Built-in Agent
+## Built-in Agents
 
-`supercode` currently bundles one built-in agent:
+`supercode` currently bundles these built-in agents:
 
+- `explorer`
+- `librarian`
 - `orchestrator`
 
-Default orchestrator behavior:
+Definitions live under `src/agents/definitions/*.agent.ts` and are auto-registered by the built-in agent registry.
 
-- `mode: "primary"`
-- default color: `#6A5CFF`
-- default permission:
-  - `question: allow`
-  - `apply_patch: deny`
+Default agent roles:
 
-The plugin merges the built-in orchestrator into `config.agent` while preserving unrelated custom fields already present on the same entry.
+- `orchestrator`
+  - `mode: "primary"`
+  - default color: `#6A5CFF`
+  - default permission:
+    - `question: allow`
+    - `apply_patch: deny`
+- `explorer`
+  - `mode: "subagent"`
+  - local codebase exploration and implementation discovery
+- `librarian`
+  - `mode: "subagent"`
+  - external docs, open-source, and library behavior research
+
+The plugin merges built-in agents into `config.agent` while preserving unrelated custom fields already present on existing entries.
 
 ## Built-in Skills
 
@@ -136,6 +147,14 @@ Current supported shape:
         "question": "allow",
         "apply_patch": "deny"
       }
+    },
+    "explorer": {
+      "enabled": true,
+      "model": "gpt-5-mini"
+    },
+    "librarian": {
+      "enabled": true,
+      "model": "gpt-5-mini"
     }
   },
   "mcp": {
@@ -147,7 +166,7 @@ Current supported shape:
 ```
 
 If the file is missing, `websearch` still works with the default keyless URL.
-If `agent.orchestrator.enabled` is set to `false`, the emitted agent config is marked with `disable: true`.
+If `agent.<name>.enabled` is set to `false`, the emitted agent config is marked with `disable: true`.
 
 ## Example Resulting Agent Config
 
@@ -156,6 +175,20 @@ With no custom overrides, the plugin injects:
 ```json
 {
   "agent": {
+    "explorer": {
+      "description": "Local codebase exploration agent for finding files, tracing patterns, mapping module boundaries, and surfacing actionable implementation locations.",
+      "prompt": "<bundled explorer prompt>",
+      "mode": "subagent",
+      "color": "#3B82F6",
+      "temperature": 0.1
+    },
+    "librarian": {
+      "description": "External knowledge and open-source investigation agent for official docs, remote repositories, implementation examples, and library behavior research.",
+      "prompt": "<bundled librarian prompt>",
+      "mode": "subagent",
+      "color": "#8B5CF6",
+      "temperature": 0.1
+    },
     "orchestrator": {
       "description": "Primary coordination agent for decomposing user requests, sequencing dependent work, parallelizing independent work, and synthesizing results.",
       "prompt": "<bundled orchestrator prompt>",
@@ -213,5 +246,6 @@ bun run typecheck
 - Add more tools under `src/tools/`
 - Add more built-in skills under `src/skills/`
 - Add more built-in MCP definitions under `src/mcp/`
+- Add more `*.agent.ts` files under `src/agents/definitions/`
 - Extend the plugin hooks in `src/index.ts`
 - Keep public tool names stable if external workflows depend on them

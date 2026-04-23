@@ -1,4 +1,3 @@
-import orchestratorAgent from "./orchestrator"
 import type { AgentConfigBinding, AgentDefinition, AgentPermission, AgentPermissionRule, AgentPermissionValue } from "./types"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -48,10 +47,10 @@ function mergePluginOwnedAgentFields(
   }
 }
 
-export function buildOrchestratorAgentEntry(
+export function buildBuiltinAgentEntry(
   existingEntry: unknown,
   configEntry: AgentConfigBinding | undefined,
-  agent: AgentDefinition = orchestratorAgent,
+  agent: AgentDefinition,
 ): Record<string, unknown> {
   const ownedFields: Record<string, unknown> = {
     prompt: agent.prompt,
@@ -73,4 +72,22 @@ export function buildOrchestratorAgentEntry(
   }
 
   return merged
+}
+
+export function buildBuiltinAgentEntries(
+  existingAgentConfig: Record<string, unknown>,
+  builtinRegistry: readonly AgentDefinition[],
+  bindings: Record<string, AgentConfigBinding> = {},
+): Record<string, unknown> {
+  const mergedAgent = createSafeRecord<Record<string, unknown>>()
+
+  for (const [name, value] of Object.entries(existingAgentConfig)) {
+    mergedAgent[name] = value
+  }
+
+  for (const agent of builtinRegistry) {
+    mergedAgent[agent.name] = buildBuiltinAgentEntry(mergedAgent[agent.name], bindings[agent.name], agent)
+  }
+
+  return mergedAgent
 }

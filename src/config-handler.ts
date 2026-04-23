@@ -1,4 +1,5 @@
-import { buildOrchestratorAgentEntry } from "./agents/config"
+import { buildBuiltinAgentEntries } from "./agents/config"
+import { createBuiltinAgentRegistry } from "./agents/registry"
 import { createBuiltinMcpServers, type BuiltinMcpServer } from "./mcp"
 import { registerSkillPath, resolvePluginSkillPath } from "./skills/path-registration"
 import { loadSupercodeConfig, type SupercodeConfig } from "./supercode-config"
@@ -32,6 +33,7 @@ export function createConfigHandler(
     const skillPath = typeof options.moduleDir === "string" ? resolvePluginSkillPath(options.moduleDir) : undefined
     const existingMcp = isRecord(config.mcp) ? config.mcp : {}
     const existingAgent = isRecord(config.agent) ? config.agent : {}
+    const builtinAgentRegistry = createBuiltinAgentRegistry()
     const mergedMcp = createSafeRecord<Record<string, unknown>>()
 
     for (const [name, entry] of Object.entries(builtinMcpServers)) {
@@ -43,10 +45,7 @@ export function createConfigHandler(
     }
 
     config.mcp = mergedMcp
-    config.agent = {
-      ...existingAgent,
-      orchestrator: buildOrchestratorAgentEntry(existingAgent.orchestrator, supercodeConfig.agent?.orchestrator),
-    }
+    config.agent = buildBuiltinAgentEntries(existingAgent, builtinAgentRegistry, supercodeConfig.agent)
     registerSkillPath(config, skillPath)
   }
 }

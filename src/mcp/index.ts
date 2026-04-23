@@ -1,7 +1,4 @@
-export type RemoteMcpServer = {
-  type: "remote"
-  url: string
-}
+import { createWebsearchMcp, type RemoteMcpServer, type WebsearchMcpConfig } from "./websearch"
 
 export type LocalMcpServer = {
   type: "local"
@@ -9,8 +6,6 @@ export type LocalMcpServer = {
 }
 
 export type BuiltinMcpServer = RemoteMcpServer | LocalMcpServer
-
-import { createWebsearchMcp, type WebsearchMcpConfig } from "./websearch"
 
 const builtinMcpServers = {
   context7: {

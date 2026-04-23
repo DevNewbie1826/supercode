@@ -24,3 +24,5 @@ export type AgentConfigBinding = {
   temperature?: number
   permission?: AgentPermission
 }
+
+export type AgentConfigBindings = Record<string, AgentConfigBinding>

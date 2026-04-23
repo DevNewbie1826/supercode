@@ -1,4 +1,7 @@
-import type { RemoteMcpServer } from "./index"
+export type RemoteMcpServer = {
+  type: "remote"
+  url: string
+}
 
 export type WebsearchMcpConfig = {
   apiKey?: string

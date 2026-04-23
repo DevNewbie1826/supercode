@@ -91,4 +91,34 @@ describe("loadSupercodeConfig orchestrator parsing", () => {
       },
     })
   })
+
+  it("parses explorer and librarian bindings too", () => {
+    const directory = createDirectoryWithSupercodeConfig(
+      JSON.stringify({
+        agent: {
+          explorer: {
+            enabled: false,
+            model: "explore-model",
+          },
+          librarian: {
+            model: "librarian-model",
+            variant: "fast",
+          },
+        },
+      }),
+    )
+
+    expect(loadSupercodeConfig(directory)).toEqual({
+      agent: {
+        explorer: {
+          enabled: false,
+          model: "explore-model",
+        },
+        librarian: {
+          model: "librarian-model",
+          variant: "fast",
+        },
+      },
+    })
+  })
 })

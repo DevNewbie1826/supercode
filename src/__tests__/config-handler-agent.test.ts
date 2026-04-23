@@ -81,4 +81,38 @@ describe("createConfigHandler orchestrator agent registration", () => {
       mode: "primary",
     })
   })
+
+  it("registers explorer and librarian with config-driven overrides", async () => {
+    const config: Record<string, unknown> = {}
+
+    await createConfigHandler(
+      "/test/directory",
+      undefined,
+      {
+        preloadedConfig: {
+          agent: {
+            explorer: {
+              enabled: false,
+              model: "explore-model",
+            },
+            librarian: {
+              model: "library-model",
+              variant: "high",
+            },
+          },
+        },
+      },
+    )(config)
+
+    expect((config.agent as Record<string, Record<string, unknown>>).explorer).toMatchObject({
+      mode: "subagent",
+      model: "explore-model",
+      disable: true,
+    })
+    expect((config.agent as Record<string, Record<string, unknown>>).librarian).toMatchObject({
+      mode: "subagent",
+      model: "library-model",
+      variant: "high",
+    })
+  })
 })

@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import type { AgentDefinition } from "./types"
+import type { AgentDefinition } from "../types"
 
-const promptPath = join(dirname(fileURLToPath(import.meta.url)), "prompt-text", "orchestrator-prompt.md")
+const promptPath = join(dirname(fileURLToPath(import.meta.url)), "..", "prompt-text", "orchestrator-prompt.md")
 
 export const orchestratorAgent: AgentDefinition = {
   name: "orchestrator",
