@@ -91,3 +91,20 @@ export function buildBuiltinAgentEntries(
 
   return mergedAgent
 }
+
+export function buildBuiltinAgentDisableEntry(
+  existingEntry: unknown,
+  disable: boolean,
+): Record<string, unknown> {
+  const merged = mergePluginOwnedAgentFields(existingEntry, undefined, disable ? { disable: true } : {}, ["disable"])
+
+  if (!disable) {
+    if (isRecord(existingEntry) && typeof existingEntry.disable === "boolean") {
+      merged.disable = existingEntry.disable
+    } else {
+      merged.disable = false
+    }
+  }
+
+  return merged
+}

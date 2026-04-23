@@ -1,4 +1,5 @@
-import { buildBuiltinAgentEntries } from "./agents/config"
+import { buildBuiltinAgentDisableEntry, buildBuiltinAgentEntries } from "./agents/config"
+import { builtinAgentDisablePolicy } from "./agents/builtin-policy"
 import { createBuiltinAgentRegistry } from "./agents/registry"
 import { createBuiltinMcpServers, type BuiltinMcpServer } from "./mcp"
 import { registerSkillPath, resolvePluginSkillPath } from "./skills/path-registration"
@@ -44,8 +45,14 @@ export function createConfigHandler(
       mergedMcp[name] = value
     }
 
+    const mergedAgent = buildBuiltinAgentEntries(existingAgent, builtinAgentRegistry, supercodeConfig.agent)
+
+    for (const [name, disable] of Object.entries(builtinAgentDisablePolicy)) {
+      mergedAgent[name] = buildBuiltinAgentDisableEntry(mergedAgent[name], disable)
+    }
+
     config.mcp = mergedMcp
-    config.agent = buildBuiltinAgentEntries(existingAgent, builtinAgentRegistry, supercodeConfig.agent)
+    config.agent = mergedAgent
     registerSkillPath(config, skillPath)
   }
 }
