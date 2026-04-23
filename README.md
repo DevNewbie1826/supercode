@@ -5,8 +5,8 @@ TypeScript-based OpenCode plugin scaffold with:
 - a package entrypoint that OpenCode can install from git or npm
 - a plugin entry at `src/index.ts`
 - bundled built-in skills under `src/skills/`
-- a rebuilt tool registry compatible with the public `easycode` tool names
-- built-in MCP registration compatible with the `easycode` MCP surface
+- a rebuilt tool registry with stable public tool names
+- built-in MCP registration for the bundled MCP surface
 - a built-in orchestrator agent with `supercode.json` model overrides
 
 ## Structure
@@ -49,7 +49,7 @@ Restart OpenCode after updating config.
 
 ## What The Plugin Does
 
-The plugin currently exports the `easycode`-compatible public tool names:
+The plugin currently exports these public tool names:
 
 - `ast_grep_search`
 - `ast_grep_replace`
@@ -214,4 +214,4 @@ bun run typecheck
 - Add more built-in skills under `src/skills/`
 - Add more built-in MCP definitions under `src/mcp/`
 - Extend the plugin hooks in `src/index.ts`
-- Keep public tool names stable if you need `easycode` compatibility
+- Keep public tool names stable if external workflows depend on them
