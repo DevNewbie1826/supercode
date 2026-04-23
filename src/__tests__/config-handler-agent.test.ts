@@ -115,4 +115,58 @@ describe("createConfigHandler orchestrator agent registration", () => {
       variant: "high",
     })
   })
+
+  it("disables conflicting OpenCode default agents by policy", async () => {
+    const config: Record<string, unknown> = {}
+
+    await createConfigHandler("/test/directory")(config)
+
+    expect((config.agent as Record<string, Record<string, unknown>>).explore).toMatchObject({
+      disable: true,
+    })
+    expect((config.agent as Record<string, Record<string, unknown>>).build).toMatchObject({
+      disable: true,
+    })
+    expect((config.agent as Record<string, Record<string, unknown>>).plan).toMatchObject({
+      disable: true,
+    })
+    expect((config.agent as Record<string, Record<string, unknown>>).general).toEqual({
+      disable: false,
+    })
+  })
+
+  it("preserves existing custom fields on disabled OpenCode default agents", async () => {
+    const config: Record<string, unknown> = {
+      agent: {
+        explore: {
+          customField: "keep-me",
+        },
+      },
+    }
+
+    await createConfigHandler("/test/directory")(config)
+
+    expect((config.agent as Record<string, Record<string, unknown>>).explore).toMatchObject({
+      customField: "keep-me",
+      disable: true,
+    })
+  })
+
+  it("preserves an existing disabled general agent", async () => {
+    const config: Record<string, unknown> = {
+      agent: {
+        general: {
+          disable: true,
+          customField: "keep-me",
+        },
+      },
+    }
+
+    await createConfigHandler("/test/directory")(config)
+
+    expect((config.agent as Record<string, Record<string, unknown>>).general).toMatchObject({
+      disable: true,
+      customField: "keep-me",
+    })
+  })
 })
