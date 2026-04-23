@@ -4,7 +4,7 @@ TypeScript-based OpenCode plugin scaffold with:
 
 - a package entrypoint that OpenCode can install from git or npm
 - a plugin entry at `src/index.ts`
-- a bundled example skill in `skills/`
+- bundled built-in skills under `src/skills/`
 - a rebuilt tool registry compatible with the public `easycode` tool names
 - built-in MCP registration compatible with the `easycode` MCP surface
 
@@ -14,18 +14,20 @@ TypeScript-based OpenCode plugin scaffold with:
 .
 ├─ src/
 │  ├─ index.ts
+│  ├─ skills/
+│  │  ├─ path-registration.ts
+│  │  ├─ playwright-cli/
+│  │  └─ todo-sync/
 │  ├─ tools/
 │  │  ├─ ast/
 │  │  ├─ current-time/
 │  │  ├─ lsp/
 │  │  └─ index.ts
 │  └─ __tests__/
-├─ skills/
-│  └─ hello-world/
-│     └─ SKILL.md
 ├─ docs/
 │  └─ superpowers/
-│     └─ plans/
+│     ├─ plans/
+│     └─ specs/
 ├─ tsconfig.json
 └─ package.json
 ```
@@ -64,6 +66,22 @@ The plugin entry itself is minimal:
 2. `SupercodePlugin` wires a `config` hook and `tool: createTools()`
 3. `src/tools/` contains the tool implementations
 4. `src/mcp/` contains the built-in MCP registry
+5. `src/skills/` contains built-in skill files and skill-path registration logic
+
+## Built-in Skills
+
+`supercode` currently bundles these built-in skills:
+
+- `playwright-cli`
+- `todo-sync`
+
+The plugin automatically appends its packaged `src/skills` directory to `config.skills.paths`.
+
+Rules:
+
+- existing user `skills.paths` entries are preserved
+- duplicate paths are not appended twice
+- packaged and copied plugin layouts are both supported
 
 ## Built-in MCP
 
@@ -140,7 +158,7 @@ bun run typecheck
 ## Customize
 
 - Add more tools under `src/tools/`
+- Add more built-in skills under `src/skills/`
 - Add more built-in MCP definitions under `src/mcp/`
 - Extend the plugin hooks in `src/index.ts`
-- Replace `skills/hello-world/` with your real skills
 - Keep public tool names stable if you need `easycode` compatibility

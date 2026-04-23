@@ -1,4 +1,5 @@
 import { createBuiltinMcpServers, type BuiltinMcpServer } from "./mcp"
+import { registerSkillPath, resolvePluginSkillPath } from "./skills/path-registration"
 import { loadSupercodeConfig } from "./supercode-config"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -18,12 +19,13 @@ function cloneBuiltinMcpEntry(entry: BuiltinMcpServer): BuiltinMcpServer {
 export function createConfigHandler(
   directory: string,
   fallbackDirectory?: string,
-  options: { globalConfigPath?: string } = {},
+  options: { globalConfigPath?: string; moduleDir?: string } = {},
 ) {
   return async (config: Record<string, unknown>) => {
     const directories = fallbackDirectory && fallbackDirectory !== directory ? [directory, fallbackDirectory] : directory
     const supercodeConfig = loadSupercodeConfig(directories, options.globalConfigPath ? { globalConfigPath: options.globalConfigPath } : undefined)
     const builtinMcpServers = createBuiltinMcpServers(supercodeConfig.mcp?.websearch)
+    const skillPath = typeof options.moduleDir === "string" ? resolvePluginSkillPath(options.moduleDir) : undefined
     const existingMcp = isRecord(config.mcp) ? config.mcp : {}
     const mergedMcp = createSafeRecord<Record<string, unknown>>()
 
@@ -36,5 +38,6 @@ export function createConfigHandler(
     }
 
     config.mcp = mergedMcp
+    registerSkillPath(config, skillPath)
   }
 }
