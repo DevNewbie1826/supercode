@@ -7,23 +7,23 @@ const promptPath = join(
   dirname(fileURLToPath(import.meta.url)),
   "..",
   "prompt-text",
-  "orchestrator-prompt.md",
+  "executor-prompt.md",
 );
 
-export const orchestratorAgent: AgentDefinition = {
-  name: "orchestrator",
+export const executorAgent: AgentDefinition = {
+  name: "executor",
   description:
-    "Use as the main user-facing coordinator that drives the full Supercode workflow, delegates to skills and subagents, manages research routing, keeps todo state synced, and enforces all gates.",
+    "Use to implement one assigned task inside the isolated worktree using todo-sync, test-driven-development, scoped code changes, and task verification.",
   prompt: readFileSync(promptPath, "utf8").trim(),
-  mode: "primary",
+  mode: "subagent",
   defaults: {
-    color: "#6A5CFF",
     temperature: 0.2,
     permission: {
-      question: "allow",
       apply_patch: "deny",
+      edit: "allow",
+      todowrite: "allow",
     },
   },
 };
 
-export default orchestratorAgent;
+export default executorAgent;
