@@ -13,7 +13,7 @@ const promptPath = join(
 export const executorAgent: AgentDefinition = {
   name: "executor",
   description:
-    "Use to implement one assigned task inside the isolated worktree using todo-sync, test-driven-development, scoped code changes, and task verification.",
+    "Use to implement one assigned task inside the isolated worktree using todo-sync, test-driven-development, AST/LSP-aware editing, scoped code changes, and task verification.",
   prompt: readFileSync(promptPath, "utf8").trim(),
   mode: "subagent",
   defaults: {

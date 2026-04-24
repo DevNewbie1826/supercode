@@ -13,7 +13,7 @@ const promptPath = join(
 export const orchestratorAgent: AgentDefinition = {
   name: "orchestrator",
   description:
-    "Use as the main user-facing coordinator that drives the full Supercode workflow, delegates to skills and subagents, manages research routing, keeps todo state synced, and enforces all gates.",
+    "Use as the main user-facing coordinator that drives the full Supercode workflow, delegates to skills and subagents, manages research routing, keeps todo state synced, asks all blocking user questions through the question tool, and enforces all gates.",
   prompt: readFileSync(promptPath, "utf8").trim(),
   mode: "primary",
   defaults: {
