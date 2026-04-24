@@ -1,6 +1,6 @@
 ---
 name: execute
-description: Use when an approved plan and execution alignment exist and the workflow must implement tasks with maximum safe parallelism while forcing every task through TDD, spec review, quality review, and verification.
+description: Use when an approved plan and execution alignment exist and the workflow must implement tasks with maximum safe parallelism while forcing every task through TDD, AST/LSP checks, spec review, quality review, and verification.
 ---
 
 ## Purpose
@@ -11,6 +11,7 @@ Its job is to:
 - execute the aligned task set
 - maximize safe parallelism where allowed
 - require TDD discipline for behavior-changing work
+- require AST/LSP-aware implementation discipline when available
 - force every task through the implementation-and-review loop
 - prevent downstream completion claims without passing verification
 - run an execution-level final verification gate before handoff to `final-review`
@@ -33,6 +34,7 @@ The orchestrator owns the stage and dispatches these agents.
 - executes one assigned task at a time
 - follows task boundaries exactly
 - must use `test-driven-development` for behavior-changing implementation
+- must use AST-aware and LSP-aware tooling when available
 
 ### code-spec-reviewer
 - fully read-only
@@ -71,6 +73,7 @@ This skill requires:
 This skill must produce:
 - completed implementation for the active task set
 - per-task loop results
+- AST/LSP check status for changed files when available
 - execution-level final verification result
 - a status suitable for handoff to `final-review`
 
@@ -78,6 +81,7 @@ At minimum report:
 - completed tasks
 - changed files
 - verification run
+- LSP diagnostics status
 - whether execution-level final verification passed
 - any remaining concerns worth surfacing
 
@@ -91,10 +95,14 @@ Review loops are mandatory at the task level.
 
 TDD is mandatory for behavior-changing work.
 
+AST/LSP checks are required when available.
+
 That means:
 - multiple tasks may execute in parallel only if alignment marked them safe
 - each task must still pass its own full loop
 - behavior-changing work must go through `test-driven-development`
+- structural code changes should use AST-aware inspection or edits when available
+- changed files should be checked with LSP diagnostics when available
 - no task may be considered complete until it has passed all required review and verification gates
 - no batch may advance incomplete tasks by averaging or pooling review results
 
@@ -113,6 +121,7 @@ Reviewers must not receive executor narrative context.
 - the assigned task definition
 - changed files or diff
 - relevant verification output
+- relevant LSP diagnostics summary
 - the minimum surrounding code context needed to judge compliance
 - minimal evidence returned through `orchestrator-mediated-research`, if required
 
@@ -122,6 +131,7 @@ Reviewers must not receive executor narrative context.
 - the assigned task definition
 - changed files or diff
 - relevant verification output
+- relevant LSP diagnostics summary
 - the minimum surrounding code context needed to judge quality
 - minimal evidence returned through `orchestrator-mediated-research`, if required
 
@@ -184,18 +194,45 @@ If mocks, stubs, spies, fakes, fixtures, or test utilities are involved, the exe
 
 ---
 
+## AST and LSP Requirement
+
+The executor must actively use AST-aware and LSP-aware tools when available.
+
+Before editing:
+- use AST or symbol-aware navigation to understand definitions, references, call sites, and structural relationships when relevant
+- prefer structural understanding over blind text replacement
+- use LSP hover, definition, references, symbol lookup, or type information when available
+- inspect relevant call sites before changing public behavior or shared interfaces
+
+When editing:
+- prefer AST-aware edits for structural code changes when available
+- avoid broad regex or blind string replacement when the change depends on syntax, symbols, types, imports, or call structure
+- keep edits scoped to the assigned task
+- avoid large mechanical rewrites unless explicitly required by the task
+
+After editing:
+- run LSP diagnostics for changed files or affected workspace scope when available
+- resolve syntax errors, type errors, missing imports, unresolved symbols, and obvious diagnostics before claiming completion
+- if diagnostics remain, explicitly report whether they are pre-existing, unrelated, non-blocking, or blocking
+- do not send work to review while new blocking LSP diagnostics remain unresolved
+
+This requirement is intended to catch obvious syntax, type, import, and symbol errors before review.
+
+---
+
 ## Required Loop
 
 Every task must pass this exact loop:
 
 1. `executor`
 2. TDD validation when behavior or production code is affected
-3. `code-spec-reviewer`
-4. if spec review fails -> return findings to `executor`
-5. once spec review passes -> `code-quality-reviewer`
-6. if quality review fails -> return findings to `executor`
-7. once both reviews pass -> run task verification if not already completed
-8. mark the task complete only after verification succeeds
+3. AST/LSP inspection and diagnostics check when available
+4. `code-spec-reviewer`
+5. if spec review fails -> return findings to `executor`
+6. once spec review passes -> `code-quality-reviewer`
+7. if quality review fails -> return findings to `executor`
+8. once both reviews pass -> run task verification if not already completed
+9. mark the task complete only after verification succeeds
 
 Do not move a task to complete status before this loop passes.
 
@@ -224,17 +261,18 @@ Fresh executor replacement is an escalation tool, not the default behavior.
 2. `code-spec-reviewer` is read-only.
 3. `code-quality-reviewer` is read-only.
 4. Never skip TDD for behavior-changing work unless the exception is explicitly accepted.
-5. Never skip spec review.
-6. Never skip code quality review.
-7. Never skip task verification.
-8. Never let one task’s success justify another task’s incomplete state.
-9. Never let reviewers modify files.
-10. Never bypass the aligned execution batches.
-11. If a bug, regression, failing test, or unexpected behavior appears, route through `systematic-debugging` before attempting a fix.
-12. If repository or external evidence is needed, use `orchestrator-mediated-research`.
-13. Do not begin execution in the main working tree.
-14. Require the isolated worktree prepared by `worktree`.
-15. Respect the approved spec and approved plan. Do not silently expand scope.
+5. Never skip AST/LSP checks when available.
+6. Never skip spec review.
+7. Never skip code quality review.
+8. Never skip task verification.
+9. Never let one task’s success justify another task’s incomplete state.
+10. Never let reviewers modify files.
+11. Never bypass the aligned execution batches.
+12. If a bug, regression, failing test, or unexpected behavior appears, route through `systematic-debugging` before attempting a fix.
+13. If repository or external evidence is needed, use `orchestrator-mediated-research`.
+14. Do not begin execution in the main working tree.
+15. Require the isolated worktree prepared by `worktree`.
+16. Respect the approved spec and approved plan. Do not silently expand scope.
 
 ---
 
@@ -341,41 +379,49 @@ For each task, run this exact sequence:
    - relevant constraints
    - dependency context
    - required use of `test-driven-development` when applicable
+   - required use of AST/LSP tools when available
 
 2. executor creates and maintains task-level todo state through `todo-sync`
 
 3. executor applies `test-driven-development` for behavior-changing work
 
-4. when executor reports completion or partial completion:
+4. executor uses AST/LSP-aware tools when available:
+   - before editing for symbol/context understanding
+   - during editing for structural changes
+   - after editing for diagnostics
+
+5. when executor reports completion or partial completion:
+   - ensure LSP diagnostics status is reported when available
    - dispatch `code-spec-reviewer` with isolated review context only
 
-5. if spec review fails:
+6. if spec review fails:
    - send findings back to `executor`
    - re-run the task
    - do not proceed to quality review yet
 
-6. once spec review passes:
+7. once spec review passes:
    - dispatch `code-quality-reviewer` with isolated review context only
 
-7. if quality review fails:
+8. if quality review fails:
    - send findings back to `executor`
    - re-run the task
    - re-run spec review if needed
    - then re-run quality review
 
-8. once both reviews pass:
+9. once both reviews pass:
    - run the task verification expectation
    - if verification fails, route through `systematic-debugging`
    - apply targeted fixes through `executor`
    - re-run the required review gates
 
-9. only then mark the task complete
+10. only then mark the task complete
 
-10. invoke `todo-sync`
+11. invoke `todo-sync`
 
 ### Phase 4: Failure and Debug Routing
 If any of the following occurs:
 - verification fails
+- LSP diagnostics reveal new blocking errors
 - a regression appears
 - a test fails unexpectedly
 - runtime behavior contradicts expectations
@@ -398,6 +444,7 @@ After all tasks are complete, run an execution-level final gate.
 This gate must verify:
 - the highest-level verification command from the plan
 - the relevant test or regression suite
+- LSP diagnostics for changed files or affected workspace scope when available
 - the final success criteria implied by execution scope
 - that no obvious implementation leftovers remain
 
@@ -414,7 +461,7 @@ If the final gate fails repeatedly, escalate clearly.
 ### Phase 6: Finalize Tracking and Handoff
 When implementation work and execution-level verification are complete:
 1. invoke `todo-sync`
-2. report completed tasks, changed files, and verification status
+2. report completed tasks, changed files, LSP diagnostics status, and verification status
 3. hand off to `final-review`
 
 This skill does not make the final completion judgment for the work item.
@@ -442,6 +489,9 @@ Do not search directly.
 The `execute` skill is complete only when:
 - all in-scope tasks were implemented
 - every behavior-changing task used `test-driven-development`, or had an explicitly accepted exception
+- changed files were inspected with AST/LSP-aware tools when relevant and available
+- LSP diagnostics were checked for changed files or affected workspace scope when available
+- no new blocking LSP diagnostics remain unaddressed
 - every task passed the required executor -> spec review -> quality review -> verification loop
 - required task verification was run
 - `todo-sync` stayed current
@@ -459,6 +509,7 @@ Stop and report clearly if:
 - the plan is not executable
 - the alignment package is missing or invalid
 - required verification cannot be run
+- LSP diagnostics reveal new blocking errors that cannot be resolved in scope
 - repeated review loops do not converge
 - execution-level final verification repeatedly fails
 - implementation would require plan or spec changes beyond execution scope
@@ -474,6 +525,8 @@ If the blocker is an execution/debug problem, use `systematic-debugging`.
 Never:
 - treat parallelism as permission to skip review loops
 - write production code before the failing test when TDD applies
+- make broad structural code changes without AST/symbol understanding when available
+- ignore LSP diagnostics after edits
 - mark a task complete before it passes verification
 - let reviewers change code
 - let one task inherit another task’s review result
@@ -484,6 +537,7 @@ Always:
 - maximize safe parallelism only where alignment allows it
 - preserve the per-task mandatory review loop
 - enforce `test-driven-development` for behavior-changing work
+- use AST/LSP-aware tooling when available
 - keep reviewer context isolated from executor narrative
 - reuse the same executor by default unless replacement is warranted
 - use fresh executor replacement only as an escalation tool
