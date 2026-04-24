@@ -72,12 +72,15 @@ Operational definitions:
   - `skill` only when the requested skill name is `todo-sync`
 - Non-exempt tool use by the orchestrator must be blocked when no TODO exists
 - Session role resolution contract:
-  - identify session ID from runtime event properties using `sessionID`, `session_id`, or `properties.info.id`
+  - identify session ID from runtime event properties using top-level `sessionID`, top-level `session_id`, or `properties.info.id` only for clearly session-scoped runtime events
+  - first-version session-scoped fallback for `properties.info.id` is limited to `session.deleted` and `session.status`
   - classify as `orchestrator` when event data positively indicates the main workflow driver via `agent === "orchestrator"` or `mode === "main"` or `mode === "primary"`
   - classify as `executor` when event data positively indicates `agent === "executor"`
   - classify as `other` when a session is positively identified but does not match orchestrator or executor targeting rules
   - classify as `unknown` when event shape is insufficient for safe positive classification
   - strict guard/continuation behavior applies only to positive target classifications, never to `unknown`
+  - resolver state must be bounded via TTL-based pruning and explicit disposal support
+  - TTL enforcement must apply both when observing new events and when later hooks read role state through lookup paths
 - Idle trigger for continuation enforcement:
   - direct `session.idle` events
   - or normalized `session.status` events where `status.type === "idle"`
@@ -99,6 +102,9 @@ Operational definitions:
   - `executor`: implementation-driving execution session
   - `other`: positively identified non-target session role
   - `unknown`: event data insufficient for safe positive identification
+- Bootstrap session tracking behavior:
+  - session-level bootstrap deduplication state must be bounded via TTL-based pruning or equivalent bounded cleanup
+  - duplicate detection must identify only Supercode's own bootstrap part, not any unrelated synthetic text part
 
 ## Success Criteria
 
