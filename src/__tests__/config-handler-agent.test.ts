@@ -1,5 +1,63 @@
 import { describe, expect, it } from "bun:test"
+import { readdirSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { createConfigHandler } from "../config-handler"
+
+const definitionsDirectory = join(dirname(fileURLToPath(import.meta.url)), "../agents/definitions")
+
+function getExpectedBuiltinAgentNames(): string[] {
+  return readdirSync(definitionsDirectory)
+    .filter((fileName) => fileName.endsWith(".agent.ts"))
+    .map((fileName) => fileName.replace(/\.agent\.ts$/, ""))
+    .sort((left, right) => left.localeCompare(right))
+}
+
+function getFreshBuiltInAgentSnapshot(): Array<{
+  name: string
+  present: boolean
+  descriptionType: string
+  promptType: string
+}> {
+  const script = `
+    import { createConfigHandler } from "./src/config-handler"
+    import { readdirSync } from "node:fs"
+
+    const config = {}
+    await createConfigHandler("/test/directory")(config)
+
+    const builtinAgentNames = readdirSync("./src/agents/definitions")
+      .filter((fileName) => fileName.endsWith(".agent.ts"))
+      .map((fileName) => fileName.replace(/\\.agent\\.ts$/, ""))
+      .sort((left, right) => left.localeCompare(right))
+
+    const snapshot = builtinAgentNames.map((name) => ({
+      name,
+      present: Object.prototype.hasOwnProperty.call(config.agent ?? {}, name),
+      descriptionType: typeof config.agent?.[name]?.description,
+      promptType: typeof config.agent?.[name]?.prompt,
+    }))
+
+    process.stdout.write(JSON.stringify(snapshot))
+  `
+  const result = Bun.spawnSync({
+    cmd: ["bun", "-e", script],
+    cwd: process.cwd(),
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+
+  if (result.exitCode !== 0) {
+    throw new Error(new TextDecoder().decode(result.stderr))
+  }
+
+  return JSON.parse(new TextDecoder().decode(result.stdout)) as Array<{
+    name: string
+    present: boolean
+    descriptionType: string
+    promptType: string
+  }>
+}
 
 describe("createConfigHandler orchestrator agent registration", () => {
   it("registers the built-in orchestrator agent by default", async () => {
@@ -114,6 +172,45 @@ describe("createConfigHandler orchestrator agent registration", () => {
       model: "library-model",
       variant: "high",
     })
+  })
+
+  it("registers the full built-in agent inventory by default", async () => {
+    const builtinAgentNames = getExpectedBuiltinAgentNames()
+    const snapshot = getFreshBuiltInAgentSnapshot()
+
+    expect(snapshot.map((entry) => entry.name)).toEqual(builtinAgentNames)
+    for (const entry of snapshot) {
+      expect(entry.present).toBeTrue()
+      expect(entry.descriptionType).toBe("string")
+      expect(entry.promptType).toBe("string")
+    }
+  })
+
+  it("applies model and variant bindings across the full built-in inventory", async () => {
+    const builtinAgentNames = getExpectedBuiltinAgentNames()
+    const preloadedBindings = Object.fromEntries(
+      builtinAgentNames.map((name) => [name, { model: "openai/gpt-5.4", variant: "medium" }]),
+    )
+    const config: Record<string, unknown> = {}
+
+    await createConfigHandler(
+      "/test/directory",
+      undefined,
+      {
+        preloadedConfig: {
+          agent: preloadedBindings,
+        },
+      },
+    )(config)
+
+    const agentConfig = config.agent as Record<string, Record<string, unknown>>
+
+    for (const agentName of builtinAgentNames) {
+      expect(agentConfig[agentName]).toMatchObject({
+        model: "openai/gpt-5.4",
+        variant: "medium",
+      })
+    }
   })
 
   it("disables conflicting OpenCode default agents by policy", async () => {

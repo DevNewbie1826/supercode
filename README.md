@@ -74,26 +74,35 @@ The plugin entry itself is minimal:
 
 `supercode` currently bundles these built-in agents:
 
+- `code-quality-reviewer`
+- `code-spec-reviewer`
+- `completion-verifier`
+- `executor`
 - `explorer`
+- `final-reviewer`
 - `librarian`
 - `orchestrator`
+- `plan-challenger`
+- `plan-checker`
+- `planner`
+- `spec-reviewer`
+- `systematic-debugger`
+- `task-compliance-checker`
 
 Definitions live under `src/agents/definitions/*.agent.ts` and are auto-registered by the built-in agent registry.
 
-Default agent roles:
+The shipped set includes the primary `orchestrator`, implementation and research helpers such as `explorer`, `librarian`, and `executor`, plus stage-gated review and verification agents such as `planner`, `plan-checker`, `plan-challenger`, `spec-reviewer`, `code-spec-reviewer`, `code-quality-reviewer`, `task-compliance-checker`, `completion-verifier`, `final-reviewer`, and `systematic-debugger`.
+
+Notable built-in defaults:
 
 - `orchestrator`
   - `mode: "primary"`
   - default color: `#6A5CFF`
+  - default temperature: `0.2`
   - default permission:
     - `question: allow`
     - `apply_patch: deny`
-- `explorer`
-  - `mode: "subagent"`
-  - local codebase exploration and implementation discovery
-- `librarian`
-  - `mode: "subagent"`
-  - external docs, open-source, and library behavior research
+- all other built-in agents are registered as `mode: "subagent"`
 
 The plugin merges built-in agents into `config.agent` while preserving unrelated custom fields already present on existing entries.
 
@@ -101,8 +110,18 @@ The plugin merges built-in agents into `config.agent` while preserving unrelated
 
 `supercode` currently bundles these built-in skills:
 
+- `execute`
+- `final-review`
+- `finish`
+- `orchestrator-mediated-research`
+- `plan`
 - `playwright-cli`
+- `pre-execute-alignment`
+- `spec`
+- `systematic-debugging`
+- `test-driven-development`
 - `todo-sync`
+- `worktree`
 
 The plugin automatically appends its packaged `src/skills` directory to `config.skills.paths`.
 
@@ -132,29 +151,70 @@ Rules:
 
 Local config wins over global config.
 
+For built-in agents, the plugin merges plugin-owned fields from the built-in definitions (`prompt`, `description`, `mode`, and built-in defaults such as `color`, `temperature`, and `permission`) while preserving unrelated custom fields already present on the existing OpenCode agent entry.
+
+If `agent.<name>.enabled` is set to `false`, the emitted agent config uses `disable: true`.
+
 Current supported shape:
 
 ```json
 {
   "agent": {
-    "orchestrator": {
-      "enabled": true,
-      "model": "gpt-5",
-      "variant": "fast",
-      "color": "#6A5CFF",
-      "temperature": 0.3,
-      "permission": {
-        "question": "allow",
-        "apply_patch": "deny"
-      }
+    "code-quality-reviewer": {
+      "model": "openai/gpt-5.4",
+      "variant": "medium"
+    },
+    "code-spec-reviewer": {
+      "model": "openai/gpt-5.4",
+      "variant": "medium"
+    },
+    "completion-verifier": {
+      "model": "openai/gpt-5.4",
+      "variant": "medium"
+    },
+    "executor": {
+      "model": "openai/gpt-5.4",
+      "variant": "medium"
     },
     "explorer": {
-      "enabled": true,
-      "model": "gpt-5-mini"
+      "model": "openai/gpt-5.4",
+      "variant": "medium"
+    },
+    "final-reviewer": {
+      "model": "openai/gpt-5.4",
+      "variant": "medium"
     },
     "librarian": {
-      "enabled": true,
-      "model": "gpt-5-mini"
+      "model": "openai/gpt-5.4",
+      "variant": "medium"
+    },
+    "orchestrator": {
+      "model": "openai/gpt-5.4",
+      "variant": "medium"
+    },
+    "plan-challenger": {
+      "model": "openai/gpt-5.4",
+      "variant": "medium"
+    },
+    "plan-checker": {
+      "model": "openai/gpt-5.4",
+      "variant": "medium"
+    },
+    "planner": {
+      "model": "openai/gpt-5.4",
+      "variant": "medium"
+    },
+    "spec-reviewer": {
+      "model": "openai/gpt-5.4",
+      "variant": "medium"
+    },
+    "systematic-debugger": {
+      "model": "openai/gpt-5.4",
+      "variant": "medium"
+    },
+    "task-compliance-checker": {
+      "model": "openai/gpt-5.4",
+      "variant": "medium"
     }
   },
   "mcp": {
@@ -166,42 +226,57 @@ Current supported shape:
 ```
 
 If the file is missing, `websearch` still works with the default keyless URL.
-If `agent.<name>.enabled` is set to `false`, the emitted agent config is marked with `disable: true`.
 
 ## Example Resulting Agent Config
 
-With no custom overrides, the plugin injects:
+With built-in definitions plus the local override example above, the emitted config includes all 14 built-in agents. For each built-in entry, plugin-owned fields come from the bundled definition and `model` / `variant` come from `supercode.json` when provided.
+
+Example excerpt:
 
 ```json
 {
   "agent": {
-    "explorer": {
-      "description": "Local codebase exploration agent for finding files, tracing patterns, mapping module boundaries, and surfacing actionable implementation locations.",
-      "prompt": "<bundled explorer prompt>",
-      "mode": "subagent",
-      "color": "#3B82F6",
-      "temperature": 0.1
-    },
-    "librarian": {
-      "description": "External knowledge and open-source investigation agent for official docs, remote repositories, implementation examples, and library behavior research.",
-      "prompt": "<bundled librarian prompt>",
-      "mode": "subagent",
-      "color": "#8B5CF6",
-      "temperature": 0.1
-    },
     "orchestrator": {
-      "description": "Primary coordination agent for decomposing user requests, sequencing dependent work, parallelizing independent work, and synthesizing results.",
+      "description": "Use as the main user-facing coordinator that drives the full Supercode workflow, delegates to skills and subagents, manages research routing, keeps todo state synced, and enforces all gates.",
       "prompt": "<bundled orchestrator prompt>",
       "mode": "primary",
+      "model": "openai/gpt-5.4",
+      "variant": "medium",
       "color": "#6A5CFF",
+      "temperature": 0.2,
       "permission": {
         "question": "allow",
         "apply_patch": "deny"
       }
+    },
+    "executor": {
+      "description": "Use to implement one assigned task inside the isolated worktree using todo-sync, test-driven-development, scoped code changes, and task verification.",
+      "prompt": "<bundled executor prompt>",
+      "mode": "subagent",
+      "model": "openai/gpt-5.4",
+      "variant": "medium",
+      "temperature": 0.2,
+      "permission": {
+        "apply_patch": "deny",
+        "edit": "allow",
+        "todowrite": "allow"
+      }
+    },
+    "explorer": {
+      "description": "Searches the current repository to uncover internal implementation details, structural patterns, conventions, configs, tests, and project-specific behavior.",
+      "prompt": "<bundled explorer prompt>",
+      "mode": "subagent",
+      "model": "openai/gpt-5.4",
+      "variant": "medium",
+      "color": "#3B82F6",
+      "temperature": 0.1,
+      "notes": "custom fields already present on an existing agent entry are preserved"
     }
   }
 }
 ```
+
+The same merge pattern applies to the remaining built-in agents: `code-quality-reviewer`, `code-spec-reviewer`, `completion-verifier`, `final-reviewer`, `librarian`, `plan-challenger`, `plan-checker`, `planner`, `spec-reviewer`, `systematic-debugger`, and `task-compliance-checker`.
 
 ## Example Resulting MCP Config
 
@@ -240,6 +315,8 @@ Run:
 bun test
 bun run typecheck
 ```
+
+These are the repository verification commands used for local validation.
 
 ## Customize
 
