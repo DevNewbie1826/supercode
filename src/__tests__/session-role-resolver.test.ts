@@ -2,65 +2,79 @@ import { describe, expect, it } from "bun:test"
 import { createSessionRoleResolver } from "../hooks/session-role-resolver"
 
 describe("SessionRoleResolver", () => {
-  describe("role classification", () => {
-    it("classifies orchestrator from agent === 'orchestrator'", () => {
-      const resolver = createSessionRoleResolver()
-      resolver.observe({
-        sessionID: "sess-1",
-        type: "message.updated",
-        properties: {
-          info: { id: "msg-1", role: "user", agent: "orchestrator" },
+  // ── Shared realistic event fixtures ──────────────────────────────────
+  //
+  // These helpers produce events matching actual @opencode-ai/sdk types.
+  // Session events carry session ID at properties.info.id.
+  // Message events carry session ID at properties.info.sessionID.
+
+  function sessionCreated(sessionID: string, overrides?: { parentID?: string }) {
+    return {
+      type: "session.created" as const,
+      properties: {
+        info: {
+          id: sessionID,
+          projectID: "proj-test",
+          directory: "/test",
+          title: "Test session",
+          version: "1",
+          parentID: overrides?.parentID,
+          time: { created: 1000, updated: 1000 },
         },
-      })
+      },
+    }
+  }
+
+  function sessionUpdated(sessionID: string, overrides?: { parentID?: string }) {
+    return {
+      type: "session.updated" as const,
+      properties: {
+        info: {
+          id: sessionID,
+          projectID: "proj-test",
+          directory: "/test",
+          title: "Test session",
+          version: "1",
+          parentID: overrides?.parentID,
+          time: { created: 1000, updated: 1000 },
+        },
+      },
+    }
+  }
+
+  function assistantMessageUpdated(sessionID: string, mode: string) {
+    return {
+      type: "message.updated" as const,
+      properties: {
+        info: {
+          id: `msg-${sessionID}`,
+          sessionID,
+          role: "assistant" as const,
+          parentID: "",
+          modelID: "model-test",
+          providerID: "provider-test",
+          mode,
+          path: { cwd: "/test", root: "/test" },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 1000 },
+        },
+      },
+    }
+  }
+
+  describe("role classification", () => {
+    it("classifies orchestrator from root session + assistant mode=primary", () => {
+      const resolver = createSessionRoleResolver()
+      resolver.observe(sessionCreated("sess-1"))
+      resolver.observe(assistantMessageUpdated("sess-1", "primary"))
       expect(resolver.getRole("sess-1")).toBe("orchestrator")
     })
 
-    it("classifies orchestrator from mode === 'main'", () => {
+    it("classifies executor from child session with parentID", () => {
       const resolver = createSessionRoleResolver()
-      resolver.observe({
-        sessionID: "sess-2",
-        type: "message.updated",
-        properties: {
-          info: { id: "msg-2", role: "assistant", mode: "main" },
-        },
-      })
-      expect(resolver.getRole("sess-2")).toBe("orchestrator")
-    })
-
-    it("classifies orchestrator from mode === 'primary'", () => {
-      const resolver = createSessionRoleResolver()
-      resolver.observe({
-        sessionID: "sess-3",
-        type: "message.updated",
-        properties: {
-          info: { id: "msg-3", role: "assistant", mode: "primary" },
-        },
-      })
-      expect(resolver.getRole("sess-3")).toBe("orchestrator")
-    })
-
-    it("classifies executor from agent === 'executor'", () => {
-      const resolver = createSessionRoleResolver()
-      resolver.observe({
-        sessionID: "sess-4",
-        type: "message.updated",
-        properties: {
-          info: { id: "msg-4", role: "user", agent: "executor" },
-        },
-      })
-      expect(resolver.getRole("sess-4")).toBe("executor")
-    })
-
-    it("classifies other when session is identified but not targeted", () => {
-      const resolver = createSessionRoleResolver()
-      resolver.observe({
-        sessionID: "sess-5",
-        type: "message.updated",
-        properties: {
-          info: { id: "msg-5", role: "user", agent: "explorer" },
-        },
-      })
-      expect(resolver.getRole("sess-5")).toBe("other")
+      resolver.observe(sessionCreated("sess-2", { parentID: "parent-1" }))
+      expect(resolver.getRole("sess-2")).toBe("executor")
     })
 
     it("returns unknown for unobserved session", () => {
@@ -68,32 +82,23 @@ describe("SessionRoleResolver", () => {
       expect(resolver.getRole("nonexistent")).toBe("unknown")
     })
 
-    it("returns unknown for event without agent or mode info", () => {
+    it("returns unknown for session with only lifecycle and no primary assistant message", () => {
       const resolver = createSessionRoleResolver()
-      resolver.observe({
-        type: "session.status",
-        properties: {
-          sessionID: "sess-6",
-          status: { type: "idle" },
-        },
-      })
-      expect(resolver.getRole("sess-6")).toBe("unknown")
+      resolver.observe(sessionCreated("sess-3"))
+      expect(resolver.getRole("sess-3")).toBe("unknown")
     })
 
-    it("returns unknown when role data exists but session ID is not extractable via approved paths", () => {
+    it("returns unknown when assistant message has non-primary mode", () => {
       const resolver = createSessionRoleResolver()
-      // Event has agent info but session ID only at properties.info.sessionID (not approved)
-      resolver.observe({
-        type: "message.updated",
-        properties: {
-          info: {
-            sessionID: "sess-not-extractable",
-            role: "user",
-            agent: "orchestrator",
-          },
-        },
-      })
-      expect(resolver.getRole("sess-not-extractable")).toBe("unknown")
+      resolver.observe(sessionCreated("sess-4"))
+      resolver.observe(assistantMessageUpdated("sess-4", "sub"))
+      expect(resolver.getRole("sess-4")).toBe("unknown")
+    })
+
+    it("returns unknown when primary assistant message arrives without prior lifecycle", () => {
+      const resolver = createSessionRoleResolver()
+      resolver.observe(assistantMessageUpdated("sess-5", "primary"))
+      expect(resolver.getRole("sess-5")).toBe("unknown")
     })
   })
 
@@ -128,95 +133,26 @@ describe("SessionRoleResolver", () => {
   describe("role-seeding seam", () => {
     it("observe seeds role accessible via getRole", () => {
       const resolver = createSessionRoleResolver()
-      resolver.observe({
-        sessionID: "sess-seed",
-        type: "message.updated",
-        properties: {
-          info: { id: "msg-seed", role: "user", agent: "executor" },
-        },
-      })
+      resolver.observe(sessionCreated("sess-seed", { parentID: "parent" }))
       expect(resolver.getRole("sess-seed")).toBe("executor")
     })
 
     it("multiple observes for same session update role", () => {
       const resolver = createSessionRoleResolver()
-      resolver.observe({
-        sessionID: "sess-update",
-        type: "message.updated",
-        properties: {
-          info: { id: "msg-a", role: "user", agent: "explorer" },
-        },
-      })
-      expect(resolver.getRole("sess-update")).toBe("other")
+      // Seed as unknown root session
+      resolver.observe(sessionCreated("sess-update"))
+      expect(resolver.getRole("sess-update")).toBe("unknown")
 
-      resolver.observe({
-        sessionID: "sess-update",
-        type: "message.updated",
-        properties: {
-          info: { id: "msg-b", role: "user", agent: "orchestrator" },
-        },
-      })
+      // Add assistant primary message → upgrade to orchestrator
+      resolver.observe(assistantMessageUpdated("sess-update", "primary"))
       expect(resolver.getRole("sess-update")).toBe("orchestrator")
-    })
-
-    it("mixed agent+mode: mode='main' overrides non-target agent to orchestrator", () => {
-      const resolver = createSessionRoleResolver()
-      resolver.observe({
-        sessionID: "sess-mix-1",
-        type: "message.updated",
-        properties: {
-          info: { id: "msg-mix-1", role: "user", agent: "explorer", mode: "main" },
-        },
-      })
-      expect(resolver.getRole("sess-mix-1")).toBe("orchestrator")
-    })
-
-    it("mixed agent+mode: mode='primary' overrides non-target agent to orchestrator", () => {
-      const resolver = createSessionRoleResolver()
-      resolver.observe({
-        sessionID: "sess-mix-2",
-        type: "message.updated",
-        properties: {
-          info: { id: "msg-mix-2", role: "user", agent: "librarian", mode: "primary" },
-        },
-      })
-      expect(resolver.getRole("sess-mix-2")).toBe("orchestrator")
-    })
-
-    it("mixed agent+mode: agent='orchestrator' wins regardless of mode", () => {
-      const resolver = createSessionRoleResolver()
-      resolver.observe({
-        sessionID: "sess-mix-3",
-        type: "message.updated",
-        properties: {
-          info: { id: "msg-mix-3", role: "user", agent: "orchestrator", mode: "sub" },
-        },
-      })
-      expect(resolver.getRole("sess-mix-3")).toBe("orchestrator")
-    })
-
-    it("mixed agent+mode: agent='executor' with non-target mode is executor", () => {
-      const resolver = createSessionRoleResolver()
-      resolver.observe({
-        sessionID: "sess-mix-4",
-        type: "message.updated",
-        properties: {
-          info: { id: "msg-mix-4", role: "user", agent: "executor", mode: "sub" },
-        },
-      })
-      expect(resolver.getRole("sess-mix-4")).toBe("executor")
     })
 
     it("non-event hooks consume resolver state without reparsing raw events", () => {
       const resolver = createSessionRoleResolver()
       // Simulate event hook seeding the resolver
-      resolver.observe({
-        sessionID: "sess-consume",
-        type: "message.updated",
-        properties: {
-          info: { id: "msg-1", role: "user", agent: "orchestrator" },
-        },
-      })
+      resolver.observe(sessionCreated("sess-consume"))
+      resolver.observe(assistantMessageUpdated("sess-consume", "primary"))
 
       // Later, a non-event hook only calls getRole
       const role = resolver.getRole("sess-consume")
@@ -263,13 +199,31 @@ describe("SessionRoleResolver", () => {
       expect(resolver.extractSessionID(event)).toBe("sess-via-info")
     })
 
-    it("extracts properties.info.id for session.status", () => {
+    it("extracts properties.sessionID for session.status", () => {
       const resolver = createSessionRoleResolver()
       const event = {
         type: "session.status",
-        properties: { info: { id: "sess-via-info" } },
+        properties: { sessionID: "sess-status-props", status: { type: "idle" } },
       }
-      expect(resolver.extractSessionID(event)).toBe("sess-via-info")
+      expect(resolver.extractSessionID(event)).toBe("sess-status-props")
+    })
+
+    it("extracts properties.sessionID for session.idle", () => {
+      const resolver = createSessionRoleResolver()
+      const event = {
+        type: "session.idle",
+        properties: { sessionID: "sess-idle-props" },
+      }
+      expect(resolver.extractSessionID(event)).toBe("sess-idle-props")
+    })
+
+    it("returns undefined for session.status with only properties.info.id (not an approved path)", () => {
+      const resolver = createSessionRoleResolver()
+      const event = {
+        type: "session.status",
+        properties: { info: { id: "sess-not-valid" } },
+      }
+      expect(resolver.extractSessionID(event)).toBeUndefined()
     })
 
     it("top-level sessionID still works for message.updated even when info.id is present", () => {
@@ -295,49 +249,6 @@ describe("SessionRoleResolver", () => {
 
   describe("TTL-based pruning", () => {
     it("prunes expired entries on observe when TTL has elapsed", () => {
-      const now = Date.now()
-      const ttlMs = 1000
-      const resolver = createSessionRoleResolver({ ttlMs, now: () => now })
-
-      resolver.observe({
-        sessionID: "sess-old",
-        type: "message.updated",
-        properties: { info: { id: "msg-old", role: "user", agent: "orchestrator" } },
-      })
-      expect(resolver.getRole("sess-old")).toBe("orchestrator")
-
-      // Advance past TTL
-      const resolver2 = createSessionRoleResolver({ ttlMs, now: () => now + ttlMs + 1 })
-
-      // Manually seed then prune by observing a new event
-      resolver2.observe({
-        sessionID: "sess-old",
-        type: "message.updated",
-        properties: { info: { id: "msg-old", role: "user", agent: "orchestrator" } },
-      })
-      // Simulate TTL expiry by advancing time and observing a new event (triggers pruning)
-      const resolverWithTime = createSessionRoleResolver({
-        ttlMs,
-        now: () => now + ttlMs + 1,
-      })
-      // Seed at "now"
-      resolverWithTime.observe({
-        sessionID: "sess-old",
-        type: "message.updated",
-        properties: { info: { id: "msg-old", role: "user", agent: "orchestrator" } },
-      })
-      expect(resolverWithTime.getRole("sess-old")).toBe("orchestrator")
-
-      // Now advance time past TTL and observe a different session — should prune sess-old
-      const advancedResolver = createSessionRoleResolver({
-        ttlMs,
-        now: () => now + ttlMs + 1,
-      })
-      // We can't change now() on an existing resolver, so let's test differently
-      // Use a single resolver with controllable time
-    })
-
-    it("resolver with controllable time prunes stale entries", () => {
       let currentTime = 0
       const ttlMs = 5000
       const resolver = createSessionRoleResolver({
@@ -345,47 +256,31 @@ describe("SessionRoleResolver", () => {
         now: () => currentTime,
       })
 
-      // At t=0, seed session
+      // At t=0, seed executor
       currentTime = 0
-      resolver.observe({
-        sessionID: "sess-a",
-        type: "message.updated",
-        properties: { info: { id: "msg-a", role: "user", agent: "executor" } },
-      })
+      resolver.observe(sessionCreated("sess-a", { parentID: "parent" }))
       expect(resolver.getRole("sess-a")).toBe("executor")
 
-      // At t=3000, seed another session
+      // At t=3000, seed another executor
       currentTime = 3000
-      resolver.observe({
-        sessionID: "sess-b",
-        type: "message.updated",
-        properties: { info: { id: "msg-b", role: "user", agent: "orchestrator" } },
-      })
-      expect(resolver.getRole("sess-b")).toBe("orchestrator")
+      resolver.observe(sessionCreated("sess-b", { parentID: "parent" }))
+      expect(resolver.getRole("sess-b")).toBe("executor")
 
       // At t=8000 (past TTL for sess-a which was at t=0), observe triggers prune
       currentTime = 8000
-      resolver.observe({
-        sessionID: "sess-c",
-        type: "message.updated",
-        properties: { info: { id: "msg-c", role: "user", agent: "other" } },
-      })
+      resolver.observe(sessionCreated("sess-c", { parentID: "parent" }))
 
       // sess-a should be pruned (t=0 + 5000 = 5000 < 8000)
       expect(resolver.getRole("sess-a")).toBe("unknown")
       // sess-b should survive (t=3000 + 5000 = 8000, not yet expired at t=8000)
-      expect(resolver.getRole("sess-b")).toBe("orchestrator")
+      expect(resolver.getRole("sess-b")).toBe("executor")
       // sess-c just added
-      expect(resolver.getRole("sess-c")).toBe("other")
+      expect(resolver.getRole("sess-c")).toBe("executor")
     })
 
     it("dispose clears all state", () => {
       const resolver = createSessionRoleResolver()
-      resolver.observe({
-        sessionID: "sess-dispose",
-        type: "message.updated",
-        properties: { info: { id: "msg-d", role: "user", agent: "executor" } },
-      })
+      resolver.observe(sessionCreated("sess-dispose", { parentID: "parent" }))
       expect(resolver.getRole("sess-dispose")).toBe("executor")
 
       resolver.dispose()
@@ -401,19 +296,12 @@ describe("SessionRoleResolver", () => {
       })
 
       currentTime = 1000
-      resolver.observe({
-        sessionID: "sess-fresh",
-        type: "message.updated",
-        properties: { info: { id: "msg-f", role: "user", agent: "orchestrator" } },
-      })
+      resolver.observe(sessionCreated("sess-fresh"))
+      resolver.observe(assistantMessageUpdated("sess-fresh", "primary"))
 
       // Still within TTL
       currentTime = 4000
-      resolver.observe({
-        sessionID: "sess-other",
-        type: "message.updated",
-        properties: { info: { id: "msg-g", role: "user", agent: "executor" } },
-      })
+      resolver.observe(sessionCreated("sess-other", { parentID: "parent" }))
 
       expect(resolver.getRole("sess-fresh")).toBe("orchestrator")
       expect(resolver.getRole("sess-other")).toBe("executor")
@@ -431,11 +319,7 @@ describe("SessionRoleResolver", () => {
 
       // Seed at t=0
       currentTime = 0
-      resolver.observe({
-        sessionID: "sess-lookup",
-        type: "message.updated",
-        properties: { info: { id: "msg-l", role: "user", agent: "executor" } },
-      })
+      resolver.observe(sessionCreated("sess-lookup", { parentID: "parent" }))
       expect(resolver.getRole("sess-lookup")).toBe("executor")
 
       // Advance time past TTL without any observe
@@ -452,23 +336,299 @@ describe("SessionRoleResolver", () => {
       const resolver = createSessionRoleResolver({ now: () => currentTime })
 
       currentTime = 0
-      resolver.observe({
-        sessionID: "sess-default-ttl",
-        type: "message.updated",
-        properties: { info: { id: "msg-dt", role: "user", agent: "orchestrator" } },
-      })
+      resolver.observe(sessionCreated("sess-default-ttl"))
+      resolver.observe(assistantMessageUpdated("sess-default-ttl", "primary"))
       expect(resolver.getRole("sess-default-ttl")).toBe("orchestrator")
 
       // Advance way past any reasonable default TTL (1 hour)
       currentTime = 0 + 1000 * 60 * 60 * 2 // 2 hours
-      resolver.observe({
-        sessionID: "sess-other",
-        type: "message.updated",
-        properties: { info: { id: "msg-other", role: "user", agent: "executor" } },
-      })
+      resolver.observe(sessionCreated("sess-other", { parentID: "parent" }))
 
       expect(resolver.getRole("sess-default-ttl")).toBe("unknown")
       expect(resolver.getRole("sess-other")).toBe("executor")
+    })
+  })
+
+  // ── Authoritative event-shape classification ──────────────────────
+  //
+  // These tests use realistic SDK event shapes derived from the actual
+  // @opencode-ai/sdk TypeScript definitions. The session and message
+  // event types do NOT carry a top-level sessionID; the resolver must
+  // extract session IDs from nested fields:
+  //   - session.created/updated/deleted: properties.info.id
+  //   - message.updated: properties.info.sessionID
+  //
+  // Classification contract:
+  //   - orchestrator: root session (no parentID) + assistant message.updated with mode === "primary"
+  //   - executor: child session (parentID present) from session lifecycle event
+  //   - unknown: incomplete or missing evidence
+
+  describe("Authoritative event-shape classification", () => {
+    // ── Fixture helpers matching real SDK types ────────────────────────
+
+    /** Build a realistic session.created event (no top-level sessionID). */
+    function sessionCreated(
+      sessionID: string,
+      overrides?: { parentID?: string },
+    ) {
+      return {
+        type: "session.created" as const,
+        properties: {
+          info: {
+            id: sessionID,
+            projectID: "proj-test",
+            directory: "/test",
+            title: "Test session",
+            version: "1",
+            parentID: overrides?.parentID,
+            time: { created: 1000, updated: 1000 },
+          },
+        },
+      }
+    }
+
+    /** Build a realistic session.updated event (no top-level sessionID). */
+    function sessionUpdated(
+      sessionID: string,
+      overrides?: { parentID?: string },
+    ) {
+      return {
+        type: "session.updated" as const,
+        properties: {
+          info: {
+            id: sessionID,
+            projectID: "proj-test",
+            directory: "/test",
+            title: "Test session",
+            version: "1",
+            parentID: overrides?.parentID,
+            time: { created: 1000, updated: 1000 },
+          },
+        },
+      }
+    }
+
+    /** Build a realistic message.updated event with an assistant message. */
+    function assistantMessageUpdated(
+      sessionID: string,
+      mode: string,
+    ) {
+      return {
+        type: "message.updated" as const,
+        properties: {
+          info: {
+            id: `msg-${sessionID}`,
+            sessionID,
+            role: "assistant" as const,
+            parentID: "",
+            modelID: "model-test",
+            providerID: "provider-test",
+            mode,
+            path: { cwd: "/test", root: "/test" },
+            cost: 0,
+            tokens: {
+              input: 0,
+              output: 0,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            time: { created: 1000 },
+          },
+        },
+      }
+    }
+
+    /** Build a realistic session.deleted event (no top-level sessionID). */
+    function sessionDeleted(sessionID: string) {
+      return {
+        type: "session.deleted" as const,
+        properties: {
+          info: {
+            id: sessionID,
+            projectID: "proj-test",
+            directory: "/test",
+            title: "Test session",
+            version: "1",
+            time: { created: 1000, updated: 1000 },
+          },
+        },
+      }
+    }
+
+    // ── Orchestrator: root session + primary assistant message ──────────
+
+    it("root session.created + assistant primary message.updated → orchestrator", () => {
+      const resolver = createSessionRoleResolver()
+
+      // 1. Seed lifecycle: root session (no parentID)
+      resolver.observe(sessionCreated("sess-root-1"))
+      expect(resolver.getRole("sess-root-1")).toBe("unknown")
+
+      // 2. Seed assistant message with mode === "primary"
+      resolver.observe(assistantMessageUpdated("sess-root-1", "primary"))
+
+      // 3. Classification complete → orchestrator
+      expect(resolver.getRole("sess-root-1")).toBe("orchestrator")
+    })
+
+    it("root session.updated + assistant primary message.updated → orchestrator", () => {
+      const resolver = createSessionRoleResolver()
+
+      resolver.observe(sessionUpdated("sess-root-2"))
+      resolver.observe(assistantMessageUpdated("sess-root-2", "primary"))
+
+      expect(resolver.getRole("sess-root-2")).toBe("orchestrator")
+    })
+
+    // ── Executor: child session with parentID ───────────────────────────
+
+    it("child session.created with parentID → executor", () => {
+      const resolver = createSessionRoleResolver()
+
+      resolver.observe(sessionCreated("sess-child-1", { parentID: "sess-parent" }))
+
+      expect(resolver.getRole("sess-child-1")).toBe("executor")
+    })
+
+    it("child session.updated with parentID → executor", () => {
+      const resolver = createSessionRoleResolver()
+
+      resolver.observe(sessionUpdated("sess-child-2", { parentID: "sess-parent" }))
+
+      expect(resolver.getRole("sess-child-2")).toBe("executor")
+    })
+
+    // ── Unknown: incomplete evidence ────────────────────────────────────
+
+    it("root session without assistant message stays unknown", () => {
+      const resolver = createSessionRoleResolver()
+
+      resolver.observe(sessionCreated("sess-root-no-msg"))
+
+      expect(resolver.getRole("sess-root-no-msg")).toBe("unknown")
+    })
+
+    it("assistant primary message without prior lifecycle stays unknown", () => {
+      const resolver = createSessionRoleResolver()
+
+      // No session.created event — no lifecycle evidence
+      resolver.observe(assistantMessageUpdated("sess-no-lifecycle", "primary"))
+
+      expect(resolver.getRole("sess-no-lifecycle")).toBe("unknown")
+    })
+
+    it("root session + non-primary assistant message stays unknown", () => {
+      const resolver = createSessionRoleResolver()
+
+      resolver.observe(sessionCreated("sess-root-sub"))
+      resolver.observe(assistantMessageUpdated("sess-root-sub", "sub"))
+
+      expect(resolver.getRole("sess-root-sub")).toBe("unknown")
+    })
+
+    // ── session.deleted clears cached state ────────────────────────────
+
+    it("session.deleted clears lifecycle and role for root orchestrator session", () => {
+      const resolver = createSessionRoleResolver()
+
+      // Seed orchestrator
+      resolver.observe(sessionCreated("sess-del-1"))
+      resolver.observe(assistantMessageUpdated("sess-del-1", "primary"))
+      expect(resolver.getRole("sess-del-1")).toBe("orchestrator")
+
+      // Delete session
+      resolver.observe(sessionDeleted("sess-del-1"))
+
+      // Role should be cleared
+      expect(resolver.getRole("sess-del-1")).toBe("unknown")
+    })
+
+    it("session.deleted clears lifecycle for child executor session", () => {
+      const resolver = createSessionRoleResolver()
+
+      resolver.observe(sessionCreated("sess-del-child", { parentID: "parent" }))
+      expect(resolver.getRole("sess-del-child")).toBe("executor")
+
+      resolver.observe(sessionDeleted("sess-del-child"))
+
+      expect(resolver.getRole("sess-del-child")).toBe("unknown")
+    })
+
+    it("after session.deleted, re-observing a message does not restore orchestrator without lifecycle", () => {
+      const resolver = createSessionRoleResolver()
+
+      resolver.observe(sessionCreated("sess-del-restore"))
+      resolver.observe(assistantMessageUpdated("sess-del-restore", "primary"))
+      expect(resolver.getRole("sess-del-restore")).toBe("orchestrator")
+
+      resolver.observe(sessionDeleted("sess-del-restore"))
+      expect(resolver.getRole("sess-del-restore")).toBe("unknown")
+
+      // Re-observe the message without the lifecycle → should stay unknown
+      resolver.observe(assistantMessageUpdated("sess-del-restore", "primary"))
+      expect(resolver.getRole("sess-del-restore")).toBe("unknown")
+    })
+
+    // ── Full orchestrator sequence: both pieces required ────────────────
+
+    it("orchestrator requires BOTH lifecycle and primary assistant evidence", () => {
+      const resolver = createSessionRoleResolver()
+
+      // Only lifecycle → unknown
+      resolver.observe(sessionCreated("sess-seq"))
+      expect(resolver.getRole("sess-seq")).toBe("unknown")
+
+      // Now add assistant message → orchestrator
+      resolver.observe(assistantMessageUpdated("sess-seq", "primary"))
+      expect(resolver.getRole("sess-seq")).toBe("orchestrator")
+    })
+
+    it("child session does not upgrade to orchestrator even with primary assistant message", () => {
+      const resolver = createSessionRoleResolver()
+
+      // Seed child session lifecycle
+      resolver.observe(sessionCreated("sess-child-no-upgrade", { parentID: "parent" }))
+      expect(resolver.getRole("sess-child-no-upgrade")).toBe("executor")
+
+      // Assistant message with mode=primary should NOT upgrade child to orchestrator
+      resolver.observe(assistantMessageUpdated("sess-child-no-upgrade", "primary"))
+      expect(resolver.getRole("sess-child-no-upgrade")).toBe("executor")
+    })
+
+    // ── Extraction: session lifecycle events ────────────────────────────
+
+    it("extracts session ID from properties.info.id for session.created", () => {
+      const resolver = createSessionRoleResolver()
+      const event = sessionCreated("sess-extract-created")
+      expect(resolver.extractSessionID(event)).toBe("sess-extract-created")
+    })
+
+    it("extracts session ID from properties.info.id for session.updated", () => {
+      const resolver = createSessionRoleResolver()
+      const event = sessionUpdated("sess-extract-updated")
+      expect(resolver.extractSessionID(event)).toBe("sess-extract-updated")
+    })
+
+    // ── Extraction: message events ──────────────────────────────────────
+
+    it("extracts session ID from properties.info.sessionID for message.updated", () => {
+      const resolver = createSessionRoleResolver()
+      const event = assistantMessageUpdated("sess-extract-msg", "primary")
+      expect(resolver.extractSessionID(event)).toBe("sess-extract-msg")
+    })
+
+    // ── Unchanged: existing extraction paths still work ────────────────
+
+    it("top-level sessionID still takes priority for session.created when present", () => {
+      const resolver = createSessionRoleResolver()
+      const event = {
+        type: "session.created",
+        sessionID: "sess-top-priority",
+        properties: {
+          info: { id: "sess-info-fallback", projectID: "p", directory: "/", title: "t", version: "1", time: { created: 0, updated: 0 } },
+        },
+      }
+      expect(resolver.extractSessionID(event)).toBe("sess-top-priority")
     })
   })
 

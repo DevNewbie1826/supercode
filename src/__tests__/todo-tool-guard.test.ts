@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import { createTodoToolGuard } from "../hooks/todo-tool-guard"
+import { createSessionRoleResolver } from "../hooks/session-role-resolver"
 import type { SessionRole } from "../hooks/session-role-resolver"
 
 // ─── Contract types (mirror production surface exactly) ────────────
@@ -1035,6 +1036,96 @@ describe("TodoToolGuard", () => {
         out,
       )
       expectNoReminder(out, snap)
+    })
+  })
+
+  // ── Guard + real resolver integration ────────────────────────────────
+  //
+  // Uses the actual session-role-resolver (not a mock) to prove that
+  // resolver classification feeds into guard enforcement correctly.
+
+  describe("guard with real session-role-resolver", () => {
+    /** Build a realistic session.created event. */
+    function sessionCreated(sessionID: string, overrides?: { parentID?: string }) {
+      return {
+        type: "session.created" as const,
+        properties: {
+          info: {
+            id: sessionID,
+            projectID: "proj-test",
+            directory: "/test",
+            title: "Test",
+            version: "1",
+            parentID: overrides?.parentID,
+            time: { created: 1000, updated: 1000 },
+          },
+        },
+      }
+    }
+
+    /** Build a realistic assistant message.updated event. */
+    function assistantMessageUpdated(sessionID: string, mode: string) {
+      return {
+        type: "message.updated" as const,
+        properties: {
+          info: {
+            id: `msg-${sessionID}`,
+            sessionID,
+            role: "assistant" as const,
+            parentID: "",
+            modelID: "m",
+            providerID: "p",
+            mode,
+            path: { cwd: "/", root: "/" },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 1000 },
+          },
+        },
+      }
+    }
+
+    it("seeded orchestrator is blocked by guard with no TODO", async () => {
+      const resolver = createSessionRoleResolver()
+      const guard = createTodoToolGuard(makeCtx([]), { roleResolver: resolver })
+
+      // Seed orchestrator via realistic event sequence
+      resolver.observe(sessionCreated("sess-real-orch"))
+      resolver.observe(assistantMessageUpdated("sess-real-orch", "primary"))
+
+      await expect(
+        guard.before(
+          { tool: "read", sessionID: "sess-real-orch", callID: "c1" },
+          { args: {} },
+        ),
+      ).rejects.toThrow(/TODO/i)
+    })
+
+    it("unseeded session (unknown) bypasses guard with no TODO", async () => {
+      const resolver = createSessionRoleResolver()
+      const guard = createTodoToolGuard(makeCtx([]), { roleResolver: resolver })
+
+      // No seeding — session stays unknown
+      await expect(
+        guard.before(
+          { tool: "read", sessionID: "sess-real-unknown", callID: "c1" },
+          { args: {} },
+        ),
+      ).resolves.toBeUndefined()
+    })
+
+    it("seeded executor bypasses guard (only orchestrator blocked)", async () => {
+      const resolver = createSessionRoleResolver()
+      const guard = createTodoToolGuard(makeCtx([]), { roleResolver: resolver })
+
+      resolver.observe(sessionCreated("sess-real-exec", { parentID: "parent" }))
+
+      await expect(
+        guard.before(
+          { tool: "read", sessionID: "sess-real-exec", callID: "c1" },
+          { args: {} },
+        ),
+      ).resolves.toBeUndefined()
     })
   })
 })
