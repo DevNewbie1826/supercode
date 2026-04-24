@@ -23,8 +23,12 @@ const DEFAULT_TTL_MS = 60 * 60 * 1000
  * Extraction paths (in priority order):
  * 1. Top-level `sessionID` — always valid
  * 2. Top-level `session_id` — always valid
- * 3. `properties.info.id` — valid ONLY for session-scoped event types
- *    (session.deleted, session.status)
+ * 3. `properties.sessionID` — valid for event types that carry it
+ *    directly on properties (session.status, session.idle)
+ * 4. `properties.info.sessionID` — valid for `message.updated` events
+ *    (AssistantMessage carries sessionID)
+ * 5. `properties.info.id` — valid ONLY for session-scoped event types
+ *    (session.created, session.updated, session.deleted)
  *
  * Shared by session-role-resolver and continuation enforcer to avoid
  * duplicating the extraction contract.
@@ -36,7 +40,26 @@ export function extractSessionID(event: unknown): string | undefined {
   if (typeof e.sessionID === "string") return e.sessionID
   // 2. Top-level session_id
   if (typeof e.session_id === "string") return e.session_id
-  // 3. properties.info.id — only for session-scoped event types
+  // 3. properties.sessionID for session.status / session.idle
+  if (typeof e.type === "string" && PROPERTIES_SESSION_ID_EVENT_TYPES.has(e.type)) {
+    const props = e.properties
+    if (props != null && typeof props === "object") {
+      const sid = (props as Record<string, unknown>).sessionID
+      if (typeof sid === "string") return sid
+    }
+  }
+  // 4. properties.info.sessionID for message.updated events
+  if (typeof e.type === "string" && MESSAGE_SESSION_ID_EVENT_TYPES.has(e.type)) {
+    const props = e.properties
+    if (props != null && typeof props === "object") {
+      const info = (props as Record<string, unknown>).info
+      if (info != null && typeof info === "object") {
+        const sid = (info as Record<string, unknown>).sessionID
+        if (typeof sid === "string") return sid
+      }
+    }
+  }
+  // 5. properties.info.id — only for session-scoped event types
   if (typeof e.type === "string" && SESSION_SCOPED_EVENT_TYPES.has(e.type)) {
     const props = e.properties
     if (props != null && typeof props === "object") {
@@ -50,48 +73,33 @@ export function extractSessionID(event: unknown): string | undefined {
   return undefined
 }
 
+/** Event types where properties.sessionID is the session identifier. */
+export const PROPERTIES_SESSION_ID_EVENT_TYPES = new Set([
+  "session.status",
+  "session.idle",
+])
+
 /** Event types where properties.info.id is a valid session identifier. */
-export const SESSION_SCOPED_EVENT_TYPES = new Set(["session.deleted", "session.status"])
+export const SESSION_SCOPED_EVENT_TYPES = new Set([
+  "session.created",
+  "session.updated",
+  "session.deleted",
+])
+
+/** Event types where properties.info.sessionID is the session identifier. */
+export const MESSAGE_SESSION_ID_EVENT_TYPES = new Set(["message.updated"])
 
 export function createSessionRoleResolver(
   options?: SessionRoleResolverOptions,
 ): SessionRoleResolver {
   const ttlMs = options?.ttlMs ?? DEFAULT_TTL_MS
   const now = options?.now ?? Date.now
+
+  // Resolved role state keyed by sessionID
   const roles = new Map<string, { role: SessionRole; observedAt: number }>()
 
-  function classifyRole(event: unknown): SessionRole | undefined {
-    if (event == null || typeof event !== "object") return undefined
-    const e = event as Record<string, unknown>
-    const props = e.properties
-    if (props == null || typeof props !== "object") return undefined
-
-    const info = (props as Record<string, unknown>).info
-    if (info == null || typeof info !== "object") return undefined
-
-    const i = info as Record<string, unknown>
-    const agent = i.agent
-    const mode = i.mode
-
-    // Positive classification from agent — direct target matches
-    if (typeof agent === "string") {
-      if (agent === "orchestrator") return "orchestrator"
-      if (agent === "executor") return "executor"
-    }
-
-    // Positive classification from mode — overrides non-target agent
-    if (typeof mode === "string") {
-      if (mode === "main" || mode === "primary") return "orchestrator"
-    }
-
-    // Either agent or mode was present but neither matched a target
-    if (typeof agent === "string" || typeof mode === "string") {
-      return "other"
-    }
-
-    // No positive identification data
-    return undefined
-  }
+  // Session lifecycle facts: whether a session is a child (has parentID)
+  const sessionFacts = new Map<string, { isChild: boolean; observedAt: number }>()
 
   function pruneExpired(): void {
     const cutoff = now() - ttlMs
@@ -100,17 +108,74 @@ export function createSessionRoleResolver(
         roles.delete(key)
       }
     }
+    for (const [key, entry] of sessionFacts) {
+      if (entry.observedAt < cutoff) {
+        sessionFacts.delete(key)
+      }
+    }
   }
 
   function observe(event: unknown): void {
+    if (event == null || typeof event !== "object") return
     pruneExpired()
 
-    const sessionID = extractSessionID(event)
-    if (!sessionID) return
+    const e = event as Record<string, unknown>
+    const eventType = typeof e.type === "string" ? e.type : ""
 
-    const role = classifyRole(event)
-    if (role) {
-      roles.set(sessionID, { role, observedAt: now() })
+    // ── session.created / session.updated: cache lifecycle facts ────────
+    if (eventType === "session.created" || eventType === "session.updated") {
+      const sessionID = extractSessionID(e)
+      if (!sessionID) return
+
+      const props = e.properties
+      if (props == null || typeof props !== "object") return
+      const info = (props as Record<string, unknown>).info
+      if (info == null || typeof info !== "object") return
+
+      const i = info as Record<string, unknown>
+      const parentID = i.parentID
+      const isChild = typeof parentID === "string" && parentID !== ""
+
+      sessionFacts.set(sessionID, { isChild, observedAt: now() })
+
+      // Child sessions are immediately classified as executor
+      if (isChild) {
+        roles.set(sessionID, { role: "executor", observedAt: now() })
+      }
+      return
+    }
+
+    // ── session.deleted: clear all cached state ────────────────────────
+    if (eventType === "session.deleted") {
+      const sessionID = extractSessionID(e)
+      if (sessionID) {
+        sessionFacts.delete(sessionID)
+        roles.delete(sessionID)
+      }
+      return
+    }
+
+    // ── message.updated: upgrade root session to orchestrator ──────────
+    if (eventType === "message.updated") {
+      const sessionID = extractSessionID(e)
+      if (!sessionID) return
+
+      const props = e.properties
+      if (props == null || typeof props !== "object") return
+      const info = (props as Record<string, unknown>).info
+      if (info == null || typeof info !== "object") return
+
+      const i = info as Record<string, unknown>
+
+      // Only assistant messages with mode === "primary" trigger upgrade
+      if (i.role !== "assistant" || i.mode !== "primary") return
+
+      // Only upgrade if we have lifecycle evidence showing this is a root session
+      const facts = sessionFacts.get(sessionID)
+      if (facts && !facts.isChild) {
+        roles.set(sessionID, { role: "orchestrator", observedAt: now() })
+      }
+      return
     }
   }
 
@@ -127,6 +192,7 @@ export function createSessionRoleResolver(
 
   function dispose(): void {
     roles.clear()
+    sessionFacts.clear()
   }
 
   return { observe, getRole, extractSessionID, dispose }

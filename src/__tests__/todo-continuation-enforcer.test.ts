@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import type { SessionRole } from "../hooks/session-role-resolver"
+import { createSessionRoleResolver } from "../hooks/session-role-resolver"
 import { createTodoContinuationEnforcer } from "../hooks/todo-continuation-enforcer"
 
 /**
@@ -293,7 +294,7 @@ describe("TodoContinuationEnforcer — session.idle session ID extraction", () =
     expect(fake.pendingCount()).toBe(0)
   })
 
-  it("does NOT extract sessionID from properties.sessionID (unapproved path)", async () => {
+  it("extracts sessionID from properties.sessionID for session.idle", async () => {
     const { ctx, prompts } = makeCtx([
       { content: "Work", status: "pending" },
     ])
@@ -313,8 +314,8 @@ describe("TodoContinuationEnforcer — session.idle session ID extraction", () =
     })
     await fake.firePending()
 
-    expect(prompts).toHaveLength(0)
-    expect(fake.pendingCount()).toBe(0)
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]!.sessionID).toBe("ses-props-sid")
   })
 })
 
@@ -394,7 +395,7 @@ describe("TodoContinuationEnforcer — session.status idle normalization", () =>
     expect(prompts[0]!.sessionID).toBe("ses-status-idle")
   })
 
-  it("re-prompts on session.status idle using properties.info.id when top-level IDs absent", async () => {
+  it("re-prompts on session.status idle using properties.sessionID when top-level IDs absent", async () => {
     const { ctx, prompts } = makeCtx([
       { content: "Pending work", status: "pending" },
     ])
@@ -410,7 +411,7 @@ describe("TodoContinuationEnforcer — session.status idle normalization", () =>
       event: {
         type: "session.status",
         properties: {
-          info: { id: "ses-status-info" },
+          sessionID: "ses-status-props",
           status: { type: "idle" },
         },
       },
@@ -418,7 +419,7 @@ describe("TodoContinuationEnforcer — session.status idle normalization", () =>
     await fake.firePending()
 
     expect(prompts).toHaveLength(1)
-    expect(prompts[0]!.sessionID).toBe("ses-status-info")
+    expect(prompts[0]!.sessionID).toBe("ses-status-props")
   })
 
   it("ignores session.status with non-idle status type", async () => {
@@ -1472,6 +1473,152 @@ describe("TodoContinuationEnforcer — overlapping same-session inflight callbac
     await Promise.all([fire1, fire2])
 
     // Neither callback should have prompted
+    expect(prompts).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 21. Continuation targeting with real session-role-resolver
+// ---------------------------------------------------------------------------
+
+describe("TodoContinuationEnforcer — real resolver integration", () => {
+  /** Build a realistic session.created event. */
+  function sessionCreated(sessionID: string, overrides?: { parentID?: string }) {
+    return {
+      type: "session.created" as const,
+      properties: {
+        info: {
+          id: sessionID,
+          projectID: "proj-test",
+          directory: "/test",
+          title: "Test",
+          version: "1",
+          parentID: overrides?.parentID,
+          time: { created: 1000, updated: 1000 },
+        },
+      },
+    }
+  }
+
+  /** Build a realistic assistant message.updated event. */
+  function assistantMessageUpdated(sessionID: string, mode: string) {
+    return {
+      type: "message.updated" as const,
+      properties: {
+        info: {
+          id: `msg-${sessionID}`,
+          sessionID,
+          role: "assistant" as const,
+          parentID: "",
+          modelID: "m",
+          providerID: "p",
+          mode,
+          path: { cwd: "/", root: "/" },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 1000 },
+        },
+      },
+    }
+  }
+
+  it("continuation prompts seeded orchestrator session", async () => {
+    const resolver = createSessionRoleResolver()
+    // Seed orchestrator
+    resolver.observe(sessionCreated("sess-cont-orch"))
+    resolver.observe(assistantMessageUpdated("sess-cont-orch", "primary"))
+
+    const prompts: Array<{ sessionID: string; text: string }> = []
+    const fake = createFakeTimers()
+    const ctx = {
+      client: {
+        session: {
+          todo: () => Promise.resolve([{ content: "Work", status: "pending" }]),
+          prompt: (payload: { sessionID: string; text: string }) => {
+            prompts.push(payload)
+            return Promise.resolve()
+          },
+        },
+      },
+    }
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 0,
+      getRole: (id) => resolver.getRole(id),
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "sess-cont-orch" },
+    })
+    await fake.firePending()
+
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]!.sessionID).toBe("sess-cont-orch")
+  })
+
+  it("continuation prompts seeded executor session", async () => {
+    const resolver = createSessionRoleResolver()
+    resolver.observe(sessionCreated("sess-cont-exec", { parentID: "parent" }))
+
+    const prompts: Array<{ sessionID: string; text: string }> = []
+    const fake = createFakeTimers()
+    const ctx = {
+      client: {
+        session: {
+          todo: () => Promise.resolve([{ content: "Work", status: "pending" }]),
+          prompt: (payload: { sessionID: string; text: string }) => {
+            prompts.push(payload)
+            return Promise.resolve()
+          },
+        },
+      },
+    }
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 0,
+      getRole: (id) => resolver.getRole(id),
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "sess-cont-exec" },
+    })
+    await fake.firePending()
+
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]!.sessionID).toBe("sess-cont-exec")
+  })
+
+  it("continuation skips unseeded (unknown) session", async () => {
+    const resolver = createSessionRoleResolver()
+    // No seeding — session stays unknown
+
+    const prompts: Array<{ sessionID: string; text: string }> = []
+    const fake = createFakeTimers()
+    const ctx = {
+      client: {
+        session: {
+          todo: () => Promise.resolve([{ content: "Work", status: "pending" }]),
+          prompt: (payload: { sessionID: string; text: string }) => {
+            prompts.push(payload)
+            return Promise.resolve()
+          },
+        },
+      },
+    }
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 0,
+      getRole: (id) => resolver.getRole(id),
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "sess-cont-unknown" },
+    })
+    await fake.firePending()
+
     expect(prompts).toHaveLength(0)
   })
 })
