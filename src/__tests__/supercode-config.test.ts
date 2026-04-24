@@ -58,7 +58,7 @@ describe("loadSupercodeConfig", () => {
   it("ignores invalid JSON and unknown-only shapes", () => {
     const directory = createDirectoryWithSupercodeConfig("{broken json")
 
-    expect(loadSupercodeConfig(directory)).toEqual({})
+    expect(loadSupercodeConfig(directory, { globalConfigPath: "/nonexistent/supercode-config-test-global.json" })).toEqual({})
   })
 
   it("returns the default global config path", () => {

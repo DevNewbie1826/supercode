@@ -49,3 +49,24 @@ describe("SupercodePlugin MCP wiring", () => {
     })
   })
 })
+
+describe("SupercodePlugin hook wiring", () => {
+  it("exposes event and experimental.chat.messages.transform hooks", async () => {
+    const directory = createDirectoryWithSupercodeConfig("{}")
+    const hooks = await SupercodePlugin({
+      client: { app: { log() { return Promise.resolve() } } },
+      project: "test-project",
+      directory,
+      worktree: directory,
+      serverUrl: new URL("https://example.com"),
+      $: {} as PluginInput["$"],
+    } as unknown as PluginInput)
+
+    expect(hooks.config).toBeFunction()
+    expect(hooks.tool).toBeDefined()
+    expect(hooks.event).toBeFunction()
+    expect(hooks["experimental.chat.messages.transform"]).toBeFunction()
+    expect(hooks["tool.execute.before"]).toBeFunction()
+    expect(hooks["tool.execute.after"]).toBeFunction()
+  })
+})
