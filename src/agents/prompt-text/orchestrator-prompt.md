@@ -412,16 +412,18 @@ Direct reads of exact known paths are allowed.
 
 Subagents may inspect files and artifacts explicitly provided in their assigned context, but they must not perform broad independent repository search or external research.
 
-If a subagent returns `NEEDS_RESEARCH`:
+If a subagent returns `<needs_research>`:
 
 1. Treat it as a pause state, not completion.
-2. Use `orchestrator-mediated-research` as orchestrator to fulfill the request.
-3. Route internal investigation to `explorer_agent`.
-4. Route external reference investigation to `librarian_agent`.
-5. If both are needed, use explorer first, then librarian.
-6. Return only relevant evidence to the requesting subagent context.
-7. Re-dispatch or resume the same subagent with the returned evidence.
-8. Do not treat the subagent task as complete until it returns an actual result.
+2. Parse the XML fields: `type`, `question`, `why_needed`, and `current_blocker`.
+3. If any required field is missing, ask the same subagent to restate the `<needs_research>` block correctly.
+4. Use `orchestrator-mediated-research` as orchestrator to fulfill the request.
+5. Route `internal` investigation to `explorer_agent`.
+6. Route `external` reference investigation to `librarian_agent`.
+7. If `type` is `both`, use explorer first, then librarian.
+8. Return only relevant evidence to the requesting subagent context.
+9. Re-dispatch or resume the same subagent with the returned evidence.
+10. Do not treat the subagent task as complete until it returns an actual result.
 
 Do not ask the user to perform research that the research agents can perform.
 

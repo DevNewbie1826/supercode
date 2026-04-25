@@ -493,11 +493,20 @@ Agents may directly inspect files, diffs, artifacts, and evidence explicitly pro
 
 If additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond provided context, use `orchestrator-mediated-research`.
 
-When used by a subagent, `orchestrator-mediated-research` returns a `NEEDS_RESEARCH` handoff for the orchestrator to fulfill.
+When used by a subagent, `orchestrator-mediated-research` returns a structured `<needs_research>` XML handoff for the orchestrator to fulfill.
+
+Required handoff shape:
+
+```xml
+<needs_research>
+  <type>internal|external|both</type>
+  <question>[precise research question]</question>
+  <why_needed>[why this evidence is required to continue safely]</why_needed>
+  <current_blocker>[the judgment or action that cannot be completed without this evidence]</current_blocker>
+</needs_research>
+```
 
 Do not guess when required evidence is missing.
-
----
 
 ## Completion Standard
 

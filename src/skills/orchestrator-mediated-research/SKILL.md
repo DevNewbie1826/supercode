@@ -1,6 +1,6 @@
 ---
 name: orchestrator-mediated-research
-description: Use only when additional discovery, broad investigation, cross-file tracing, or external reference evidence is needed beyond known paths; orchestrators fulfill research, while subagents emit NEEDS_RESEARCH instead of researching.
+description: Use only when additional discovery, broad investigation, cross-file tracing, or external reference evidence is needed beyond known paths; orchestrators fulfill research, while subagents emit a <needs_research> XML handoff instead of researching.
 ---
 
 ## Purpose
@@ -38,7 +38,7 @@ Do not perform the research yourself.
 
 Do not call `explorer_agent` or `librarian_agent`.
 
-If additional evidence is needed beyond your assigned context, emit a `NEEDS_RESEARCH` handoff and stop your current judgment until the orchestrator returns evidence.
+If additional evidence is needed beyond your assigned context, emit a structured `<needs_research>` XML handoff and stop your current judgment until the orchestrator returns evidence.
 
 ---
 
@@ -118,45 +118,42 @@ If both internal and external investigation are required:
 
 ---
 
-## Subagent NEEDS_RESEARCH Output
+## Subagent `<needs_research>` Output
 
-When a subagent uses this skill, it must output exactly this handoff shape:
+When a subagent uses this skill, it must output exactly this XML handoff shape:
 
-```markdown
-### Status
-NEEDS_RESEARCH
-
-### Research Needed
-- type: internal | external | both
-- question: [precise research question]
-- why_needed: [why this evidence is required to continue safely]
-
-### Current Blocker
-- [what cannot be judged, completed, approved, rejected, or routed safely without this evidence]
+```xml
+<needs_research>
+  <type>internal|external|both</type>
+  <question>[precise research question]</question>
+  <why_needed>[why this evidence is required to continue safely]</why_needed>
+  <current_blocker>[what cannot be judged, completed, approved, rejected, or routed safely without this evidence]</current_blocker>
+</needs_research>
 ```
 
 The subagent must not:
 - continue by guessing
 - approve, reject, route, or implement based on missing evidence
 - call explorer_agent or librarian_agent directly
-- treat `NEEDS_RESEARCH` as completion
+- treat `<needs_research>` as completion
 
----
+## Orchestrator Handling of `<needs_research>`
 
-## Orchestrator Handling of NEEDS_RESEARCH
-
-When a subagent returns `NEEDS_RESEARCH`, the orchestrator must:
+When a subagent returns `<needs_research>`, the orchestrator must:
 
 1. Treat it as a pause state, not completion.
-2. Determine whether the request is internal, external, or both.
-3. Use `explorer_agent` for internal repository discovery.
-4. Use `librarian_agent` for external reference evidence.
-5. Use explorer first, then librarian, when both are required.
-6. Return only relevant evidence to the requesting subagent context.
-7. Re-dispatch or resume the subagent with that evidence.
-8. Preserve reviewer context isolation.
-
----
+2. Parse the XML fields:
+   - `type`
+   - `question`
+   - `why_needed`
+   - `current_blocker`
+3. If any required field is missing, ask the same subagent to restate the `<needs_research>` block correctly.
+4. Use `explorer_agent` for internal repository discovery.
+5. Use `librarian_agent` for external reference evidence.
+6. Use explorer first, then librarian, when `type` is `both`.
+7. Return only relevant evidence to the requesting subagent context.
+8. Re-dispatch or resume the subagent with that evidence.
+9. Preserve reviewer context isolation.
 
 ## Orchestrator Research Result Format
 

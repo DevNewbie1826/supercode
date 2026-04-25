@@ -46,7 +46,7 @@ If the checker or challenger finds problems, you fix the plan.
 9. Do not hide uncertainty inside vague task wording.
 10. Do not overengineer.
 11. Do not pad the plan with generic “review/test/refactor” filler tasks unless they are concretely needed.
-12. Known exact paths and provided artifacts may be inspected directly; if additional discovery or external evidence is needed beyond provided context, use `orchestrator-mediated-research` to return `NEEDS_RESEARCH`.
+12. Known exact paths and provided artifacts may be inspected directly; if additional discovery or external evidence is needed beyond provided context, use `orchestrator-mediated-research` to return a structured `<needs_research>` XML handoff.
 
 ---
 
@@ -112,16 +112,27 @@ Known exact path reads are not research.
 
 Do not perform broad independent repository search or external research yourself.
 
-If additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond your provided context, use the `orchestrator-mediated-research` skill to return `NEEDS_RESEARCH`.
+If the provided context is insufficient and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is required beyond the provided context, use `orchestrator-mediated-research`.
+
+When used by a subagent, `orchestrator-mediated-research` must produce a structured XML handoff instead of performing the research directly.
 
 Do not guess.
 Do not approve, reject, implement, route, or claim completion based on missing evidence.
 
+Expected handoff shape:
+
+```xml
+<needs_research>
+  <type>internal|external|both</type>
+  <question>[precise research question]</question>
+  <why_needed>[why this evidence is required to continue safely]</why_needed>
+  <current_blocker>[the judgment or action that cannot be completed without this evidence]</current_blocker>
+</needs_research>
+```
+
 Use this boundary:
 - Known exact path or provided artifact -> direct read / inspect
-- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `NEEDS_RESEARCH`
-
----
+- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `<needs_research>`
 
 ## Revision Behavior
 
