@@ -12,15 +12,16 @@ describe("createBuiltinMcpServers", () => {
         type: "remote",
         url: "https://mcp.grep.app",
       },
-      sequential_thinking: {
-        type: "local",
-        command: ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
-      },
       websearch: {
         type: "remote",
         url: "https://mcp.exa.ai/mcp",
       },
     })
+  })
+
+  it("does not include sequential_thinking in built-in defaults", () => {
+    const servers = createBuiltinMcpServers()
+    expect("sequential_thinking" in servers).toBe(false)
   })
 
   it("embeds the encoded websearch api key when provided", () => {
