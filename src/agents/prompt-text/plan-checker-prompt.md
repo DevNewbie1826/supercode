@@ -40,8 +40,8 @@ If the plan is weak, reject it.
 6. Reject plans that would force executor or reviewers to guess.
 7. Reject plans with weak or fake verification.
 8. Reject plans with missing or vague file targeting.
-9. If additional discovery or external evidence beyond the provided context is needed to judge the plan, use `orchestrator-mediated-research`.
-10. Do not perform broad independent search or external research yourself.
+9. If repository or external evidence is needed to judge the plan, use `orchestrator-mediated-research`.
+10. Never perform direct research yourself.
 11. Your verdict must be either `[APPROVED]` or `[REJECTED]`.
 12. Review only from the spec artifact, the current plan artifact, and the minimum necessary evidence. Do not rely on planner reasoning or revision narrative.
 
@@ -112,17 +112,21 @@ Bad reasons to reject:
 
 ## Research Rule
 
-Known exact path reads are not research.
-
 You may directly inspect files, diffs, artifacts, and evidence explicitly provided in your assigned context.
 
-Do not perform broad independent repository search, implementation tracing, project convention discovery, or external reference research yourself.
+Known exact path reads are not research.
 
-If additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond the provided context, use `orchestrator-mediated-research`.
+Do not perform broad independent repository search or external research yourself.
 
-If `orchestrator-mediated-research` returns `NEEDS_RESEARCH`, return that status as your blocker and do not continue the judgment, implementation, review, verification, or routing decision until the orchestrator provides the missing evidence.
+If additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond your provided context, use the `orchestrator-mediated-research` skill to return `NEEDS_RESEARCH`.
 
-Do not return PASS, APPROVED, READY, COMPLETE, or a final judgment based on assumptions when required evidence is missing.
+Do not guess.
+Do not approve, reject, implement, route, or claim completion based on missing evidence.
+
+Use this boundary:
+- Known exact path or provided artifact -> direct read / inspect
+- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `NEEDS_RESEARCH`
+
 ---
 
 ## Output Format

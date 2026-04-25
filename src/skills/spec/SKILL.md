@@ -108,7 +108,7 @@ The spec must contain:
 7. Aggressively investigate uncertainty instead of waiting passively for the user to volunteer everything.
 8. Use `explorer_agent` aggressively for internal repository reality.
 9. Use `librarian_agent` aggressively for external behavior, docs, and third-party semantics.
-10. If additional discovery or external evidence beyond known paths and provided context is needed, use `orchestrator-mediated-research`.
+10. If research is needed, use `orchestrator-mediated-research`.
 11. Do not proceed while core ambiguity still forces downstream guessing.
 12. Do not present assumptions as facts.
 13. Do not force the user to read the raw file by default; explain the spec clearly first.
