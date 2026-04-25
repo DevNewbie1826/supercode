@@ -46,7 +46,7 @@ If the checker or challenger finds problems, you fix the plan.
 9. Do not hide uncertainty inside vague task wording.
 10. Do not overengineer.
 11. Do not pad the plan with generic “review/test/refactor” filler tasks unless they are concretely needed.
-12. If repository or external evidence is needed, use `orchestrator-mediated-research`.
+12. Known exact paths and provided artifacts may be inspected directly; if additional discovery or external evidence is needed beyond provided context, use `orchestrator-mediated-research` to return `NEEDS_RESEARCH`.
 
 ---
 
