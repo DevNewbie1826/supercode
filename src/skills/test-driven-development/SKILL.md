@@ -279,17 +279,15 @@ Update todo state when each TDD step completes.
 
 ## Research Rule
 
-If repository or external evidence is needed to write the correct test or understand expected behavior, use `orchestrator-mediated-research`.
+Known exact path reads are not research.
 
-Do not perform direct research yourself.
+Use direct reads for exact files, artifacts, diffs, or paths already provided by the user, the active workflow, or prior evidence.
 
-Use research when:
-- expected behavior depends on repository conventions
-- test patterns are unclear
-- external library behavior affects expected behavior
-- version-specific behavior matters
-- you would otherwise be guessing
+Use `orchestrator-mediated-research` only when additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond known paths and provided context.
 
+If a subagent returns `NEEDS_RESEARCH`, the orchestrator must fulfill that request through `orchestrator-mediated-research` and then resume or re-dispatch the subagent with the returned evidence.
+
+Do not let the stage proceed based on missing evidence or guessing.
 ---
 
 ## Verification Checklist

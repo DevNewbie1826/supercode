@@ -86,8 +86,8 @@ This output does not need to be saved as a file unless your environment wants to
 5. Do not allow execution to infer missing verification criteria.
 6. Do not allow optimistic parallelism when conflicts are plausible.
 7. Use conservative batching when certainty is low.
-8. If repository or external evidence is needed, use `orchestrator-mediated-research`.
-9. Do not perform direct research outside that mechanism.
+8. If additional discovery or external evidence beyond known paths and provided context is needed, use `orchestrator-mediated-research`.
+9. Do not perform broad independent search or external research outside that mechanism.
 10. Treat hidden dependency risk as a real blocker.
 11. Prefer blocking early over letting `execute` discover preventable coordination failures.
 12. `task-compliance-checker` is read-only and must not rewrite the plan.
@@ -258,18 +258,15 @@ The orchestrator should treat repeated or serious `task-compliance-checker` obje
 
 ## Research Rule
 
-If alignment requires repository or external evidence, use `orchestrator-mediated-research`.
+Known exact path reads are not research.
 
-Use it when:
-- file ownership is uncertain
-- real conflict surfaces are unclear
-- current repository structure may invalidate task grouping
-- external dependency behavior affects ordering or verification
-- you would otherwise be guessing
+Use direct reads for exact files, artifacts, diffs, or paths already provided by the user, the active workflow, or prior evidence.
 
-Do not search directly.
-Do not let alignment rest on unverified assumptions.
+Use `orchestrator-mediated-research` only when additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond known paths and provided context.
 
+If a subagent returns `NEEDS_RESEARCH`, the orchestrator must fulfill that request through `orchestrator-mediated-research` and then resume or re-dispatch the subagent with the returned evidence.
+
+Do not let the stage proceed based on missing evidence or guessing.
 ---
 
 ## Alignment Standard

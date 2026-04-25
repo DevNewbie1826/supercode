@@ -303,7 +303,7 @@ Use only after final-review PASS.
 All finish decisions must be asked through the `question` tool.
 
 ### orchestrator-mediated-research
-Use for all subagent research requests and for orchestrator-controlled research routing.
+Use to fulfill `NEEDS_RESEARCH` handoffs from subagents and for orchestrator-controlled broad discovery or external reference investigation. Do not use it just to read known exact paths.
 
 ### test-driven-development
 Executor uses this for behavior-changing implementation.
@@ -404,49 +404,55 @@ If both internal and external investigation are required:
 
 ---
 
+## Direct Read vs Delegated Research
+
+Known exact path reads are not research.
+
+You may directly read:
+- files explicitly provided by the user
+- known workflow artifacts
+- active skill files
+- active agent prompt files
+- exact paths required by the current stage
+- files already identified by prior research results
+- known `.worktrees/<work_id>/...` paths
+
+Use `orchestrator-mediated-research` when investigation requires:
+- repository-wide discovery
+- pattern search
+- implementation tracing
+- unknown file discovery
+- project convention discovery
+- external documentation
+- OSS/API/library behavior
+- version-specific guidance
+- comparison between repository behavior and external references
+
+Do not invoke `orchestrator-mediated-research` merely to read a known file path.
+
+
+---
+
 ## Research Routing
 
-All research must follow `orchestrator-mediated-research`.
+All delegated subagent research and broad discovery must follow `orchestrator-mediated-research`.
 
-Subagents must not search directly.
+Direct reads of exact known paths are allowed.
 
-When a subagent needs evidence:
-1. It sends a `research_request`.
-2. You validate the request.
-3. You route to `explorer_agent`, `librarian_agent`, or both.
-4. You return a matching `research_response`.
+Subagents may inspect files, diffs, artifacts, and evidence explicitly provided in their assigned context, but must not perform broad independent repository search or external reference research.
 
-Minimal request schema:
+When a subagent returns `NEEDS_RESEARCH`:
 
-```xml
-<research_request>
-  <request_id></request_id>
-  <requested_by_task_id></requested_by_task_id>
-  <type>internal|external|both</type>
-  <question></question>
-  <why_needed></why_needed>
-</research_request>
-```
+1. Treat it as a pause state, not completion.
+2. Use `orchestrator-mediated-research` as orchestrator to fulfill the request.
+3. Route internal discovery to `explorer_agent`.
+4. Route external reference checks to `librarian_agent`.
+5. If both are needed, use explorer first, then librarian.
+6. Return focused evidence only to the requesting subagent context.
+7. Re-dispatch or resume the same subagent with the returned evidence.
+8. Do not treat the subagent’s original task as complete until it finishes after receiving evidence.
 
-Minimal response schema:
-
-```xml
-<research_response>
-  <request_id></request_id>
-  <requested_by_task_id></requested_by_task_id>
-  <type>internal|external|both</type>
-  <findings></findings>
-  <sources_or_paths></sources_or_paths>
-  <unresolved_uncertainty></unresolved_uncertainty>
-</research_response>
-```
-
-Routing identity:
-- match by `request_id`
-- also match by `requested_by_task_id`
-
-Never route research results by role name alone.
-
+Never route research results by role name alone when a Task tool `task_id` is available.
 ---
 
 ## Context Isolation Rules

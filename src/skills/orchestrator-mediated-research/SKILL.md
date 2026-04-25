@@ -1,43 +1,100 @@
 ---
 name: orchestrator-mediated-research
-description: Use when a subagent needs repository or external evidence and all research must be routed centrally through the orchestrator instead of being performed directly by subagents.
+description: Use when additional repository discovery, implementation tracing, project convention discovery, or external reference evidence is needed beyond known files and provided context; orchestrators fulfill research, while subagents receive a NEEDS_RESEARCH handoff instead of performing research themselves.
 ---
 
 ## Purpose
 
-The `orchestrator-mediated-research` skill centralizes research through the orchestrator.
+The `orchestrator-mediated-research` skill defines the safe research boundary for Supercode.
 
-Its purpose is to:
-- prevent uncontrolled direct research by subagents
-- route internal and external investigation through the correct research agents
-- avoid duplicated search effort
-- ensure research results are returned to the correct requesting subagent session
+It exists to:
+- distinguish direct reads from actual research
+- prevent subagents from doing uncontrolled broad discovery
+- let subagents safely signal that additional evidence is required
+- let the orchestrator fulfill that request through `explorer_agent` and/or `librarian_agent`
+- avoid duplicated investigation
+- preserve reviewer and executor context isolation
 
 This is a shared utility skill, not a main workflow stage.
 
 ---
 
-## Core Rule
+## Core Boundary
 
-Subagents must not perform direct research on their own.
+Known exact path reads are not research.
 
-If research is needed, they must send a structured `research_request` to the orchestrator.
+An agent may directly inspect files, diffs, artifacts, or evidence that are explicitly provided in its assigned context.
 
-The orchestrator is the only agent allowed to delegate research to:
-- `explorer_agent`
-- `librarian_agent`
+Examples of direct reads:
+- reading `docs/supercode/<work_id>/spec.md`
+- reading `docs/supercode/<work_id>/plan.md`
+- reading `docs/supercode/<work_id>/final-review.md`
+- reading a file path explicitly provided by the user
+- reading a changed file or diff already provided to a reviewer
+- reading an active skill or agent prompt being edited
+- reading a known file path returned by a prior research result
+
+Use this skill only when additional discovery or external evidence is needed.
+
+Examples that require this skill:
+- discovering which files implement a behavior
+- tracing behavior across unknown modules
+- searching repository-wide patterns
+- finding project conventions not already provided
+- checking official external docs
+- verifying OSS/API/library behavior
+- comparing repository behavior against external documentation
+
+Rule of thumb:
+
+```text
+Known exact path -> direct read.
+Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> orchestrator-mediated-research.
+```
 
 ---
 
-## Identity Rule
+## Role-Aware Behavior
 
-When subagents are created through the Task tool, the returned `task_id` is the primary unique identifier for that subagent session.
+This skill behaves differently depending on who is using it.
 
-Use:
-- `requested_by_task_id` as the primary routing identity
-- `request_id` as the unique id for the research request itself
+### If you are the orchestrator
 
-Do not route research results using only role name or stage name.
+Fulfill the research.
+
+The orchestrator may:
+- route internal repository discovery to `explorer_agent`
+- route external reference checks to `librarian_agent`
+- use both when internal reality and external documentation must be compared
+- return an evidence summary to the requesting subagent or continue the current orchestrator task
+
+### If you are a subagent
+
+Do not perform the research yourself.
+
+Do not call `explorer_agent`.
+Do not call `librarian_agent`.
+Do not do broad repository discovery.
+Do not search external references directly.
+
+Instead, return a `NEEDS_RESEARCH` handoff and stop the current judgment until the orchestrator provides evidence.
+
+Use this exact format:
+
+```markdown
+### Status
+NEEDS_RESEARCH
+
+### Research Needed
+- type: internal | external | both
+- question: [precise research question]
+- why_needed: [why this evidence is required to continue safely]
+
+### Current Blocker
+- [what cannot be judged, planned, implemented, reviewed, verified, or routed safely without this evidence]
+```
+
+Do not return PASS, APPROVED, READY, COMPLETE, or a final judgment while the required evidence is missing.
 
 ---
 
@@ -80,6 +137,7 @@ Prefer this agent when the primary question is about official or external behavi
 ## Combined Usage Rule
 
 If both internal and external investigation are required:
+
 1. Use `explorer_agent` first.
 2. Then use `librarian_agent`.
 3. Keep the scopes distinct.
@@ -90,192 +148,104 @@ If both internal and external investigation are required:
 ## When to Use
 
 Use this skill when:
-- a subagent needs repository evidence it cannot safely infer
-- a subagent needs external documentation or third-party reference evidence
-- a stage requires verification against actual codebase behavior
-- a stage requires official or external confirmation
-- both repository reality and external reference knowledge are needed
+- additional repository discovery is needed beyond provided context
+- cross-file investigation is required
+- implementation tracing is required
+- project convention discovery is required
+- external documentation or third-party reference evidence is needed
+- a decision would otherwise rely on guessing
 
 Do not use this skill when:
-- the answer is already explicit in the current task context
+- an exact known file path only needs to be read
+- the user explicitly provided the file path to inspect
+- the required file, diff, artifact, or evidence is already in the assigned context
 - the needed information is already available from a prior returned result
-- the task does not require repository or external investigation
-
----
-
-## Required Request Schema
-
-Use this exact schema:
-
-```xml
-<research_request>
-  <request_id></request_id>
-  <requested_by_task_id></requested_by_task_id>
-  <type>internal|external|both</type>
-  <question></question>
-  <why_needed></why_needed>
-</research_request>
-```
-
----
-
-## Field Definitions
-
-### request_id
-Unique identifier for this specific research request.
-
-### requested_by_task_id
-The unique `task_id` returned when that subagent session was created through the Task tool.
-
-This is mandatory.
-
-### type
-Allowed values:
-- `internal`
-- `external`
-- `both`
-
-### question
-A precise research question.
-
-Good:
-- `Which files currently implement token refresh and retry handling?`
-- `What does the official framework documentation say about pending navigation state in the version we use?`
-
-Bad:
-- `Look into auth`
-- `Research this library`
-
-### why_needed
-Why the requesting agent needs this evidence.
+- the issue is purely a formatting or local artifact inspection task
 
 ---
 
 ## Orchestrator Responsibilities
 
-When receiving a `research_request`, the orchestrator must:
+When using this skill as orchestrator:
 
-1. Validate that the request is specific enough.
-2. Preserve `request_id` and `requested_by_task_id` exactly.
-3. Decide whether the scope is internal, external, or both.
-4. Delegate to the correct research agent(s).
-5. Avoid duplicated search effort.
-6. Return the result only to the matching requesting subagent session.
-
-The orchestrator must not:
-- silently drop valid research requests
-- route by role name alone
-- broadcast one result to multiple same-role agents
-- perform overlapping research twice without reason
+1. Determine whether the need is internal, external, or both.
+2. Refine weak research questions into precise operational questions when possible.
+3. Use `explorer_agent` for internal repository discovery.
+4. Use `librarian_agent` for external reference checks.
+5. Use explorer first and librarian second when both are needed.
+6. Keep scopes distinct.
+7. Return only the evidence needed by the requesting subagent.
+8. Preserve context isolation by not sending irrelevant narrative or unrelated findings.
+9. Do not treat `NEEDS_RESEARCH` as task completion.
 
 ---
 
-## Required Response Schema
+## Evidence Return Format
 
-The orchestrator must return results in this structure:
+When the orchestrator fulfills research, return evidence in this structure:
 
-```xml
-<research_response>
-  <request_id></request_id>
-  <requested_by_task_id></requested_by_task_id>
-  <type>internal|external|both</type>
-  <findings></findings>
-  <sources_or_paths></sources_or_paths>
-  <unresolved_uncertainty></unresolved_uncertainty>
-</research_response>
+```markdown
+### Research Result
+- type: internal | external | both
+
+### Findings
+- [key finding]
+- [key finding]
+
+### Sources or Paths
+- [file path, symbol, doc reference, or source location]
+- [file path, symbol, doc reference, or source location]
+
+### Unresolved Uncertainty
+- [remaining uncertainty]
+- or `None.`
 ```
 
----
-
-## Routing Rules
-
-- A response must match exactly one prior request.
-- Matching must be done by `request_id`.
-- `requested_by_task_id` must also match.
-- If either is missing or ambiguous, do not deliver the result.
-- Do not route by role name alone.
-
----
-
-## Returned Evidence Rules
-
-### findings
-The main result of the research.
-
-### sources_or_paths
-Relevant file paths, documentation references, or source locations.
-
-### unresolved_uncertainty
-Any important uncertainty that remains after research.
-
-If none remains, say `None.`
+Keep the result focused on the requesting task.
 
 ---
 
 ## Subagent Rules
 
-Any subagent using this skill must follow these rules:
+When this skill is used by a subagent:
 
-1. Do not search directly.
-2. Always include `request_id`.
-3. Always include your exact `requested_by_task_id`.
-4. Keep the question specific and task-relevant.
-5. Resume work only after the orchestrator returns a matching `research_response`.
+1. Do not investigate directly.
+2. Return `NEEDS_RESEARCH`.
+3. Ask one precise research question.
+4. Explain why the evidence is required.
+5. State the current blocker.
+6. Stop the current judgment until the orchestrator returns evidence.
 
----
-
-## Orchestrator Triage Rule
-
-If a research request is weak or underspecified, the orchestrator should:
-1. refine it into a narrower operational question when possible
-2. otherwise return a request for refinement to the subagent
-
-Do not send low-quality research requests downstream if they can be improved centrally first.
+Do not use this skill to avoid ordinary direct reads of provided files or artifacts.
 
 ---
 
 ## Completion Condition
 
-This skill is complete for a given request when:
-- a valid `research_request` has been submitted
-- the orchestrator has routed it correctly
-- research has been performed by the appropriate agent(s)
-- the evidence has been returned to the correct requesting subagent session
+For an orchestrator-led research request, this skill is complete when:
+- the correct research agent(s) have been used
+- duplicated search was avoided
+- relevant evidence has been returned
+- unresolved uncertainty is stated
+
+For a subagent-led invocation, this skill is complete when:
+- a clear `NEEDS_RESEARCH` handoff has been returned to the orchestrator
 
 ---
 
 ## Failure Handling
 
-If the orchestrator cannot route a result safely:
-- do not guess
-- do not deliver the response to a same-role fallback agent
-- do not broadcast to multiple active subagents
-- surface a routing error
-- require exact identifier recovery before continuation
+If the research question is too vague:
+- narrow it if possible
+- otherwise ask the requesting agent to clarify the required evidence
 
----
+If research cannot be completed:
+- return the attempted scope
+- return what was checked
+- return what remains unknown
+- do not fabricate evidence
 
-## Example Internal Request
-
-```xml
-<research_request>
-  <request_id>req-001</request_id>
-  <requested_by_task_id>ses_241b366a0ffefepLX2MU95Ia3E</requested_by_task_id>
-  <type>internal</type>
-  <question>Which files currently implement token refresh and retry handling?</question>
-  <why_needed>Need exact file targets for the assigned execution task.</why_needed>
-</research_request>
-```
-
-## Example Matching Response
-
-```xml
-<research_response>
-  <request_id>req-001</request_id>
-  <requested_by_task_id>ses_241b366a0ffefepLX2MU95Ia3E</requested_by_task_id>
-  <type>internal</type>
-  <findings>Primary refresh logic is implemented in auth/session.ts and api/retry-client.ts.</findings>
-  <sources_or_paths>src/auth/session.ts; src/api/retry-client.ts</sources_or_paths>
-  <unresolved_uncertainty>None.</unresolved_uncertainty>
-</research_response>
-```
+If a subagent invokes this skill for a known exact path:
+- do not perform broad research
+- indicate that direct read of the provided path is allowed
+- continue only if the assigned context actually includes the file or path

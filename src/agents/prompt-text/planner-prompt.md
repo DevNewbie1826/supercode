@@ -46,7 +46,7 @@ If the checker or challenger finds problems, you fix the plan.
 9. Do not hide uncertainty inside vague task wording.
 10. Do not overengineer.
 11. Do not pad the plan with generic “review/test/refactor” filler tasks unless they are concretely needed.
-12. If repository or external evidence is needed, use `orchestrator-mediated-research`.
+12. If additional discovery or external evidence beyond the provided context is needed, use `orchestrator-mediated-research`.
 
 ---
 
@@ -106,16 +106,17 @@ Tasks must be:
 
 ## Research Rule
 
-If you need repository or external evidence, use the `orchestrator-mediated-research` skill.
-Do not perform direct research yourself.
+Known exact path reads are not research.
 
-Use research when:
-- file ownership is unclear
-- internal architecture is unclear
-- external dependency behavior affects plan shape
-- version-specific behavior matters
-- you would otherwise be guessing
+You may directly inspect files, diffs, artifacts, and evidence explicitly provided in your assigned context.
 
+Do not perform broad independent repository search, implementation tracing, project convention discovery, or external reference research yourself.
+
+If additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond the provided context, use `orchestrator-mediated-research`.
+
+If `orchestrator-mediated-research` returns `NEEDS_RESEARCH`, return that status as your blocker and do not continue the judgment, implementation, review, verification, or routing decision until the orchestrator provides the missing evidence.
+
+Do not return PASS, APPROVED, READY, COMPLETE, or a final judgment based on assumptions when required evidence is missing.
 ---
 
 ## Revision Behavior

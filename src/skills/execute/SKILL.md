@@ -73,7 +73,7 @@ This skill requires:
 This skill must produce:
 - completed implementation for the active task set
 - per-task loop results
-- AST/LSP check status for changed files when available
+- executor-reported AST/LSP check status for changed files when available
 - execution-level final verification result
 - a status suitable for handoff to `final-review`
 
@@ -81,7 +81,7 @@ At minimum report:
 - completed tasks
 - changed files
 - verification run
-- LSP diagnostics status
+- executor-reported LSP diagnostics status
 - whether execution-level final verification passed
 - any remaining concerns worth surfacing
 
@@ -95,14 +95,14 @@ Review loops are mandatory at the task level.
 
 TDD is mandatory for behavior-changing work.
 
-AST/LSP checks are required when available.
+The orchestrator must require the executor to perform AST/LSP checks when available.
 
 That means:
 - multiple tasks may execute in parallel only if alignment marked them safe
 - each task must still pass its own full loop
 - behavior-changing work must go through `test-driven-development`
-- structural code changes should use AST-aware inspection or edits when available
-- changed files should be checked with LSP diagnostics when available
+- executor should use AST-aware inspection or edits for structural code changes when available
+- executor should check changed files with LSP diagnostics when available and report the result
 - no task may be considered complete until it has passed all required review and verification gates
 - no batch may advance incomplete tasks by averaging or pooling review results
 
@@ -196,7 +196,9 @@ If mocks, stubs, spies, fakes, fixtures, or test utilities are involved, the exe
 
 ## AST and LSP Requirement
 
-The executor must actively use AST-aware and LSP-aware tools when available.
+The executor, not the orchestrator, is responsible for AST/LSP-aware implementation work.
+
+The orchestrator must require the executor to use AST-aware and LSP-aware tools when available and to report the result.
 
 Before editing:
 - use AST or symbol-aware navigation to understand definitions, references, call sites, and structural relationships when relevant
@@ -211,7 +213,7 @@ When editing:
 - avoid large mechanical rewrites unless explicitly required by the task
 
 After editing:
-- run LSP diagnostics for changed files or affected workspace scope when available
+- executor must run LSP diagnostics for changed files or affected workspace scope when available
 - resolve syntax errors, type errors, missing imports, unresolved symbols, and obvious diagnostics before claiming completion
 - if diagnostics remain, explicitly report whether they are pre-existing, unrelated, non-blocking, or blocking
 - do not send work to review while new blocking LSP diagnostics remain unresolved
@@ -226,7 +228,7 @@ Every task must pass this exact loop:
 
 1. `executor`
 2. TDD validation when behavior or production code is affected
-3. AST/LSP inspection and diagnostics check when available
+3. executor-reported AST/LSP inspection and diagnostics check when available
 4. `code-spec-reviewer`
 5. if spec review fails -> return findings to `executor`
 6. once spec review passes -> `code-quality-reviewer`
@@ -261,7 +263,7 @@ Fresh executor replacement is an escalation tool, not the default behavior.
 2. `code-spec-reviewer` is read-only.
 3. `code-quality-reviewer` is read-only.
 4. Never skip TDD for behavior-changing work unless the exception is explicitly accepted.
-5. Never skip AST/LSP checks when available.
+5. Never allow the executor to skip AST/LSP checks when available.
 6. Never skip spec review.
 7. Never skip code quality review.
 8. Never skip task verification.
@@ -269,7 +271,7 @@ Fresh executor replacement is an escalation tool, not the default behavior.
 10. Never let reviewers modify files.
 11. Never bypass the aligned execution batches.
 12. If a bug, regression, failing test, or unexpected behavior appears, route through `systematic-debugging` before attempting a fix.
-13. If repository or external evidence is needed, use `orchestrator-mediated-research`.
+13. If additional discovery or external evidence beyond known paths and provided context is needed, use `orchestrator-mediated-research`.
 14. Do not begin execution in the main working tree.
 15. Require the isolated worktree prepared by `worktree`.
 16. Respect the approved spec and approved plan. Do not silently expand scope.
@@ -444,9 +446,11 @@ After all tasks are complete, run an execution-level final gate.
 This gate must verify:
 - the highest-level verification command from the plan
 - the relevant test or regression suite
-- LSP diagnostics for changed files or affected workspace scope when available
+- executor-reported LSP diagnostics status for changed files or affected workspace scope when available
 - the final success criteria implied by execution scope
 - that no obvious implementation leftovers remain
+
+The orchestrator must not perform LSP diagnostics directly during this stage unless manually recovering from a missing executor report; it should rely on executor-reported diagnostics status and request a fresh executor pass if the report is missing or inadequate.
 
 If the final gate fails:
 1. invoke `systematic-debugging`
@@ -461,7 +465,7 @@ If the final gate fails repeatedly, escalate clearly.
 ### Phase 6: Finalize Tracking and Handoff
 When implementation work and execution-level verification are complete:
 1. invoke `todo-sync`
-2. report completed tasks, changed files, LSP diagnostics status, and verification status
+2. report completed tasks, changed files, executor-reported LSP diagnostics status, and verification status
 3. hand off to `final-review`
 
 This skill does not make the final completion judgment for the work item.
@@ -470,18 +474,15 @@ This skill does not make the final completion judgment for the work item.
 
 ## Research Rule
 
-If execution requires repository or external evidence, use `orchestrator-mediated-research`.
+Known exact path reads are not research.
 
-Use it when:
-- file ownership is unclear
-- internal patterns must be confirmed
-- current repository behavior matters
-- external dependency behavior matters
-- version-specific behavior affects implementation
-- you would otherwise be guessing
+Use direct reads for exact files, artifacts, diffs, or paths already provided by the user, the active workflow, or prior evidence.
 
-Do not search directly.
+Use `orchestrator-mediated-research` only when additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond known paths and provided context.
 
+If a subagent returns `NEEDS_RESEARCH`, the orchestrator must fulfill that request through `orchestrator-mediated-research` and then resume or re-dispatch the subagent with the returned evidence.
+
+Do not let the stage proceed based on missing evidence or guessing.
 ---
 
 ## Completion Standard
@@ -489,8 +490,8 @@ Do not search directly.
 The `execute` skill is complete only when:
 - all in-scope tasks were implemented
 - every behavior-changing task used `test-driven-development`, or had an explicitly accepted exception
-- changed files were inspected with AST/LSP-aware tools when relevant and available
-- LSP diagnostics were checked for changed files or affected workspace scope when available
+- executor reported that changed files were inspected with AST/LSP-aware tools when relevant and available
+- executor reported that LSP diagnostics were checked for changed files or affected workspace scope when available
 - no new blocking LSP diagnostics remain unaddressed
 - every task passed the required executor -> spec review -> quality review -> verification loop
 - required task verification was run
@@ -509,7 +510,7 @@ Stop and report clearly if:
 - the plan is not executable
 - the alignment package is missing or invalid
 - required verification cannot be run
-- LSP diagnostics reveal new blocking errors that cannot be resolved in scope
+- executor-reported LSP diagnostics reveal new blocking errors that cannot be resolved in scope
 - repeated review loops do not converge
 - execution-level final verification repeatedly fails
 - implementation would require plan or spec changes beyond execution scope

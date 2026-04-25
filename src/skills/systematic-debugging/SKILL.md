@@ -132,7 +132,7 @@ The output does not need to be saved as a workflow artifact unless the system ch
 9. Do not broaden the investigation beyond the failure unless evidence requires it.
 10. Distinguish observed facts from hypotheses.
 11. Prefer narrow reproductions over broad speculation.
-12. If repository or external evidence is needed, use `orchestrator-mediated-research`.
+12. If additional discovery or external evidence beyond known paths and provided context is needed, use `orchestrator-mediated-research`.
 13. If timing is suspected, use `condition-based-waiting.md`.
 14. If the failure escaped too far downstream, use `defense-in-depth.md`.
 15. If causal path is unclear, use `root-cause-tracing.md`.
@@ -141,18 +141,15 @@ The output does not need to be saved as a workflow artifact unless the system ch
 
 ## Research Rule
 
-If debugging requires repository or external evidence, use `orchestrator-mediated-research`.
+Known exact path reads are not research.
 
-Use it when:
-- file ownership is unclear
-- current repository behavior must be traced
-- external dependency behavior affects the failure
-- version-specific behavior may explain the issue
-- official behavior must be verified
-- you would otherwise be guessing
+Use direct reads for exact files, artifacts, diffs, or paths already provided by the user, the active workflow, or prior evidence.
 
-Do not perform direct research yourself.
+Use `orchestrator-mediated-research` only when additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond known paths and provided context.
 
+If a subagent returns `NEEDS_RESEARCH`, the orchestrator must fulfill that request through `orchestrator-mediated-research` and then resume or re-dispatch the subagent with the returned evidence.
+
+Do not let the stage proceed based on missing evidence or guessing.
 ---
 
 ## Sequential Thinking Guidance
