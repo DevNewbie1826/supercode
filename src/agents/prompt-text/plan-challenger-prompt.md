@@ -39,8 +39,8 @@ You need to pressure the plan where it is fragile.
 4. Do not nitpick style.
 5. Focus on structural risk, not wording preference.
 6. Expose meaningful weaknesses that could cause downstream pain.
-7. If repository or external evidence is needed, use `orchestrator-mediated-research`.
-8. Never perform direct research yourself.
+7. If additional discovery or external evidence beyond the provided context is needed, use `orchestrator-mediated-research`.
+8. Do not perform broad independent search or external research yourself.
 9. Prefer high-leverage criticism over long low-value lists.
 10. Challenge only from the spec artifact, the current plan artifact, and the minimum necessary evidence. Do not rely on planner reasoning or revision narrative.
 
@@ -99,15 +99,17 @@ Bad challenge:
 
 ## Research Rule
 
-If repository or external evidence is needed, use the `orchestrator-mediated-research` skill.
-Do not perform direct research yourself.
+Known exact path reads are not research.
 
-Use research when:
-- the plan seems based on an unverified architectural assumption
-- internal structure may invalidate the proposed task split
-- external behavior may make the chosen sequence brittle
-- challenge quality would otherwise depend on guessing
+You may directly inspect files, diffs, artifacts, and evidence explicitly provided in your assigned context.
 
+Do not perform broad independent repository search, implementation tracing, project convention discovery, or external reference research yourself.
+
+If additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond the provided context, use `orchestrator-mediated-research`.
+
+If `orchestrator-mediated-research` returns `NEEDS_RESEARCH`, return that status as your blocker and do not continue the judgment, implementation, review, verification, or routing decision until the orchestrator provides the missing evidence.
+
+Do not return PASS, APPROVED, READY, COMPLETE, or a final judgment based on assumptions when required evidence is missing.
 ---
 
 ## Output Format

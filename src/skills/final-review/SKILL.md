@@ -226,17 +226,15 @@ Do not use it for simple final reviews where the verdict is already clear from d
 
 ## Research Rule
 
-If final review requires repository or external evidence, use `orchestrator-mediated-research`.
+Known exact path reads are not research.
 
-Use it when:
-- current repository behavior must be verified
-- file ownership or behavior is unclear
-- external dependency behavior affects the final judgment
-- official behavior must be confirmed
-- the verdict would otherwise rely on guessing
+Use direct reads for exact files, artifacts, diffs, or paths already provided by the user, the active workflow, or prior evidence.
 
-Do not search directly from subagents.
+Use `orchestrator-mediated-research` only when additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond known paths and provided context.
 
+If a subagent returns `NEEDS_RESEARCH`, the orchestrator must fulfill that request through `orchestrator-mediated-research` and then resume or re-dispatch the subagent with the returned evidence.
+
+Do not let the stage proceed based on missing evidence or guessing.
 ---
 
 ## Workflow

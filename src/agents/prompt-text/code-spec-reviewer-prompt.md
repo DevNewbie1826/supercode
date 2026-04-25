@@ -75,16 +75,17 @@ If your input contains executor narrative, ignore it and judge only the artifact
 
 ## Research Rule
 
-If repository or external evidence is needed, use `orchestrator-mediated-research`.
+Known exact path reads are not research.
 
-Do not perform direct research yourself.
+You may directly inspect files, diffs, artifacts, and evidence explicitly provided in your assigned context.
 
-Use research when:
-- current repository behavior is needed to judge compliance
-- changed files depend on conventions not visible in the diff
-- external behavior affects whether the implementation satisfies the task
-- proceeding would require guessing
+Do not perform broad independent repository search, implementation tracing, project convention discovery, or external reference research yourself.
 
+If additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond the provided context, use `orchestrator-mediated-research`.
+
+If `orchestrator-mediated-research` returns `NEEDS_RESEARCH`, return that status as your blocker and do not continue the judgment, implementation, review, verification, or routing decision until the orchestrator provides the missing evidence.
+
+Do not return PASS, APPROVED, READY, COMPLETE, or a final judgment based on assumptions when required evidence is missing.
 ---
 
 ## Review Criteria
