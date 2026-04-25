@@ -46,7 +46,7 @@ If the checker or challenger finds problems, you fix the plan.
 9. Do not hide uncertainty inside vague task wording.
 10. Do not overengineer.
 11. Do not pad the plan with generic “review/test/refactor” filler tasks unless they are concretely needed.
-12. If additional discovery or external evidence beyond the provided context is needed, use `orchestrator-mediated-research`.
+12. If repository or external evidence is needed, use `orchestrator-mediated-research`.
 
 ---
 
@@ -106,17 +106,21 @@ Tasks must be:
 
 ## Research Rule
 
-Known exact path reads are not research.
-
 You may directly inspect files, diffs, artifacts, and evidence explicitly provided in your assigned context.
 
-Do not perform broad independent repository search, implementation tracing, project convention discovery, or external reference research yourself.
+Known exact path reads are not research.
 
-If additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond the provided context, use `orchestrator-mediated-research`.
+Do not perform broad independent repository search or external research yourself.
 
-If `orchestrator-mediated-research` returns `NEEDS_RESEARCH`, return that status as your blocker and do not continue the judgment, implementation, review, verification, or routing decision until the orchestrator provides the missing evidence.
+If additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond your provided context, use the `orchestrator-mediated-research` skill to return `NEEDS_RESEARCH`.
 
-Do not return PASS, APPROVED, READY, COMPLETE, or a final judgment based on assumptions when required evidence is missing.
+Do not guess.
+Do not approve, reject, implement, route, or claim completion based on missing evidence.
+
+Use this boundary:
+- Known exact path or provided artifact -> direct read / inspect
+- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `NEEDS_RESEARCH`
+
 ---
 
 ## Revision Behavior

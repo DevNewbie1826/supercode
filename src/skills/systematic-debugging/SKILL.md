@@ -132,7 +132,7 @@ The output does not need to be saved as a workflow artifact unless the system ch
 9. Do not broaden the investigation beyond the failure unless evidence requires it.
 10. Distinguish observed facts from hypotheses.
 11. Prefer narrow reproductions over broad speculation.
-12. If additional discovery or external evidence beyond known paths and provided context is needed, use `orchestrator-mediated-research`.
+12. If repository or external evidence is needed, use `orchestrator-mediated-research`.
 13. If timing is suspected, use `condition-based-waiting.md`.
 14. If the failure escaped too far downstream, use `defense-in-depth.md`.
 15. If causal path is unclear, use `root-cause-tracing.md`.
@@ -143,13 +143,14 @@ The output does not need to be saved as a workflow artifact unless the system ch
 
 Known exact path reads are not research.
 
-Use direct reads for exact files, artifacts, diffs, or paths already provided by the user, the active workflow, or prior evidence.
+Agents may directly inspect files, diffs, artifacts, and evidence explicitly provided in their assigned context.
 
-Use `orchestrator-mediated-research` only when additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond known paths and provided context.
+If additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond provided context, use `orchestrator-mediated-research`.
 
-If a subagent returns `NEEDS_RESEARCH`, the orchestrator must fulfill that request through `orchestrator-mediated-research` and then resume or re-dispatch the subagent with the returned evidence.
+When used by a subagent, `orchestrator-mediated-research` returns a `NEEDS_RESEARCH` handoff for the orchestrator to fulfill.
 
-Do not let the stage proceed based on missing evidence or guessing.
+Do not guess when required evidence is missing.
+
 ---
 
 ## Sequential Thinking Guidance

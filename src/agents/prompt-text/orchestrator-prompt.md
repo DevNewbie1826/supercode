@@ -303,7 +303,7 @@ Use only after final-review PASS.
 All finish decisions must be asked through the `question` tool.
 
 ### orchestrator-mediated-research
-Use to fulfill `NEEDS_RESEARCH` handoffs from subagents and for orchestrator-controlled broad discovery or external reference investigation. Do not use it just to read known exact paths.
+Use for all subagent research requests and for orchestrator-controlled research routing.
 
 ### test-driven-development
 Executor uses this for behavior-changing implementation.
@@ -404,11 +404,34 @@ If both internal and external investigation are required:
 
 ---
 
+## Research Routing
+
+All delegated subagent research and broad discovery must follow `orchestrator-mediated-research`.
+
+Direct reads of exact known paths are allowed.
+
+Subagents may inspect files and artifacts explicitly provided in their assigned context, but they must not perform broad independent repository search or external research.
+
+If a subagent returns `NEEDS_RESEARCH`:
+
+1. Treat it as a pause state, not completion.
+2. Use `orchestrator-mediated-research` as orchestrator to fulfill the request.
+3. Route internal investigation to `explorer_agent`.
+4. Route external reference investigation to `librarian_agent`.
+5. If both are needed, use explorer first, then librarian.
+6. Return only relevant evidence to the requesting subagent context.
+7. Re-dispatch or resume the same subagent with the returned evidence.
+8. Do not treat the subagent task as complete until it returns an actual result.
+
+Do not ask the user to perform research that the research agents can perform.
+
+---
+
 ## Direct Read vs Delegated Research
 
-Known exact path reads are not research.
+You may directly read exact known paths.
 
-You may directly read:
+Direct read is appropriate for:
 - files explicitly provided by the user
 - known workflow artifacts
 - active skill files
@@ -426,34 +449,23 @@ Use `orchestrator-mediated-research` when investigation requires:
 - external documentation
 - OSS/API/library behavior
 - version-specific guidance
-- comparison between repository behavior and external references
 
 Do not invoke `orchestrator-mediated-research` merely to read a known file path.
 
-
 ---
 
-## Research Routing
+## Research Result Return Rule
 
-All delegated subagent research and broad discovery must follow `orchestrator-mediated-research`.
+When returning research evidence to a subagent, preserve context isolation.
 
-Direct reads of exact known paths are allowed.
+Return only:
+- the evidence needed for the subagent's decision
+- relevant file paths or external references
+- unresolved uncertainty
 
-Subagents may inspect files, diffs, artifacts, and evidence explicitly provided in their assigned context, but must not perform broad independent repository search or external reference research.
+Do not include unrelated exploration notes.
+Do not include other subagents' private context.
 
-When a subagent returns `NEEDS_RESEARCH`:
-
-1. Treat it as a pause state, not completion.
-2. Use `orchestrator-mediated-research` as orchestrator to fulfill the request.
-3. Route internal discovery to `explorer_agent`.
-4. Route external reference checks to `librarian_agent`.
-5. If both are needed, use explorer first, then librarian.
-6. Return focused evidence only to the requesting subagent context.
-7. Re-dispatch or resume the same subagent with the returned evidence.
-8. Do not treat the subagent’s original task as complete until it finishes after receiving evidence.
-
-Never route research results by role name alone when a Task tool `task_id` is available.
----
 
 ## Context Isolation Rules
 

@@ -13,7 +13,7 @@ const promptPath = join(
 const librarianAgent: AgentDefinition = {
   name: "librarian",
   description:
-    "Searches external documentation, OSS sources, and official references to verify third-party library behavior, APIs, best practices, and version-specific guidance.",
+    "Use to research external libraries, OSS codebases, official docs, implementation details, history, and best practices with evidence-backed GitHub permalinks.",
   prompt: readFileSync(promptPath, "utf8").trim(),
   mode: "subagent",
   defaults: {

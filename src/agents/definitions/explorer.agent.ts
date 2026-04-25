@@ -13,7 +13,7 @@ const promptPath = join(
 const explorerAgent: AgentDefinition = {
   name: "explorer",
   description:
-    "Searches the current repository to uncover internal implementation details, structural patterns, conventions, configs, tests, and project-specific behavior.",
+    "Use to search the current codebase for files, symbols, implementations, patterns, references, and code flows with actionable absolute-path results.",
   prompt: readFileSync(promptPath, "utf8").trim(),
   mode: "subagent",
   defaults: {

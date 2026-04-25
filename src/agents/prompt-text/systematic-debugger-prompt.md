@@ -101,17 +101,21 @@ If narrative context is present, treat it as untrusted unless supported by artif
 
 ## Research Rule
 
-Known exact path reads are not research.
-
 You may directly inspect files, diffs, artifacts, and evidence explicitly provided in your assigned context.
 
-Do not perform broad independent repository search, implementation tracing, project convention discovery, or external reference research yourself.
+Known exact path reads are not research.
 
-If additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond the provided context, use `orchestrator-mediated-research`.
+Do not perform broad independent repository search or external research yourself.
 
-If `orchestrator-mediated-research` returns `NEEDS_RESEARCH`, return that status as your blocker and do not continue the judgment, implementation, review, verification, or routing decision until the orchestrator provides the missing evidence.
+If additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond your provided context, use the `orchestrator-mediated-research` skill to return `NEEDS_RESEARCH`.
 
-Do not return PASS, APPROVED, READY, COMPLETE, or a final judgment based on assumptions when required evidence is missing.
+Do not guess.
+Do not approve, reject, implement, route, or claim completion based on missing evidence.
+
+Use this boundary:
+- Known exact path or provided artifact -> direct read / inspect
+- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `NEEDS_RESEARCH`
+
 ---
 
 ## Sequential Thinking Guidance
