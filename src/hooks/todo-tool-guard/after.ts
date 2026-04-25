@@ -29,8 +29,8 @@ export function createAfterHandler(
   ): Promise<void> {
     const role = roleResolver.getRole(input.sessionID)
 
-    // Only orchestrator sessions get reminders
-    if (role !== "orchestrator") return
+    // Guard orchestrator and unknown (unseeded main-candidate) sessions
+    if (role !== "orchestrator" && role !== "unknown") return
 
     if (input.tool === "todowrite") {
       // Same-call snapshot comparison:

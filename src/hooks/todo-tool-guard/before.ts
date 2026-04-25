@@ -55,8 +55,8 @@ export function createBeforeHandler(
   ): Promise<void> {
     const role = roleResolver.getRole(input.sessionID)
 
-    // Only orchestrator sessions are blocked
-    if (role !== "orchestrator") return
+    // Guard orchestrator and unknown (unseeded main-candidate) sessions
+    if (role !== "orchestrator" && role !== "unknown") return
 
     // For todowrite: capture pre-call snapshot for same-call comparison in after-hook
     if (input.tool === "todowrite") {
