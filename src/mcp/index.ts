@@ -16,10 +16,6 @@ const builtinMcpServers = {
     type: "remote",
     url: "https://mcp.grep.app",
   },
-  sequential_thinking: {
-    type: "local",
-    command: ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
-  },
 } satisfies Record<string, BuiltinMcpServer>
 
 export function createBuiltinMcpServers(websearchConfig?: WebsearchMcpConfig): Record<string, BuiltinMcpServer> {

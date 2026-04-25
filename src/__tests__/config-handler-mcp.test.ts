@@ -36,10 +36,6 @@ describe("createConfigHandler", () => {
         type: "remote",
         url: "https://mcp.grep.app",
       },
-      sequential_thinking: {
-        type: "local",
-        command: ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
-      },
       websearch: {
         type: "remote",
         url: "https://mcp.exa.ai/mcp",
@@ -74,6 +70,24 @@ describe("createConfigHandler", () => {
     expect((config.mcp as Record<string, unknown>).websearch).toEqual({
       type: "local",
       command: ["bunx", "custom-websearch"],
+    })
+  })
+
+  it("preserves user-defined custom sequential_thinking MCP entry", async () => {
+    const config: Record<string, unknown> = {
+      mcp: {
+        sequential_thinking: {
+          type: "local",
+          command: ["npx", "-y", "@mycustom/sequential-thinking", "--port", "8080"],
+        },
+      },
+    }
+
+    await createConfigHandler("/test/directory")(config)
+
+    expect((config.mcp as Record<string, unknown>).sequential_thinking).toEqual({
+      type: "local",
+      command: ["npx", "-y", "@mycustom/sequential-thinking", "--port", "8080"],
     })
   })
 })
