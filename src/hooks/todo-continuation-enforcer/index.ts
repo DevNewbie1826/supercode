@@ -1,20 +1,24 @@
 import { normalizeTodos, hasIncompleteTodo } from "../todo-state"
-import { DEFAULT_COUNTDOWN_SECONDS, TARGET_ROLES, CONTINUATION_PROMPT } from "./constants"
-import { extractSessionID, isSessionStatusIdle } from "./session-status-normalizer"
+import { DEFAULT_COUNTDOWN_SECONDS, CONTINUATION_PROMPT } from "./constants"
+import { extractSessionID, isSessionStatusIdle, extractIdleInfoId, extractIdlePropertiesSnakeSessionId } from "./session-status-normalizer"
 import type { EnforcerCtx, EnforcerOptions, EnforcerEvent, TodoContinuationEnforcer, TimerSeam } from "./types"
 
 /**
- * Create a continuation enforcer that re-prompts idle orchestrator/executor
- * sessions when incomplete TODO items remain.
+ * Create a continuation enforcer that re-prompts idle sessions
+ * when incomplete TODO items remain.
  *
  * Behaviour:
- * - On `session.idle` events for target-role sessions, schedule a countdown
- *   timer. When it fires, re-read TODOs and prompt if incomplete work exists.
+ * - On `session.idle` events, schedule a countdown timer. When it fires,
+ *   re-read TODOs and prompt if incomplete work exists.
+ * - Zero-second countdown executes immediately without timer scheduling;
+ *   nonzero countdown schedules via timer.
  * - On `session.status` events with `status.type === "idle"`, treat the same
  *   as `session.idle` (supports properties.info.id extraction).
  * - On `session.deleted`, cancel any pending timer for that session.
  * - Repeated idle events for the same session replace the previous timer.
  * - Timers are tracked per-session for multi-session isolation.
+ * - No role gating — all sessions with incomplete TODOs are prompted
+ *   (EasyCode parity).
  */
 export function createTodoContinuationEnforcer(
   ctx: EnforcerCtx,
@@ -42,45 +46,55 @@ export function createTodoContinuationEnforcer(
     }
   }
 
+  async function executePrompt(sessionID: string): Promise<void> {
+    // Register explicit in-flight state
+    const inflight = { cancelled: false }
+    let set = inflightSessions.get(sessionID)
+    if (!set) {
+      set = new Set()
+      inflightSessions.set(sessionID, set)
+    }
+    set.add(inflight)
+    try {
+      // Re-read TODOs at execution time (not at schedule time)
+      const raw = await ctx.client.session.todo({ path: { id: sessionID } })
+      // After the async gap — check if session was deleted while in-flight
+      if (inflight.cancelled) {
+        return
+      }
+      const todos = normalizeTodos(raw)
+
+      if (hasIncompleteTodo(todos)) {
+        await ctx.client.session.prompt({
+          sessionID,
+          text: CONTINUATION_PROMPT,
+        })
+      }
+    } catch {
+      // Swallow rejection — must not produce unhandled rejections.
+    } finally {
+      // Always remove this callback's inflight entry
+      set!.delete(inflight)
+      if (set!.size === 0) {
+        inflightSessions.delete(sessionID)
+      }
+    }
+  }
+
   async function schedulePrompt(sessionID: string): Promise<void> {
     // Replace any existing timer for this session
     clearSessionTimer(sessionID)
 
+    // EasyCode parity: zero-second countdown executes immediately
+    if (countdownSeconds <= 0) {
+      await executePrompt(sessionID)
+      return
+    }
+
     const id = timer.setTimeout(async () => {
       // Remove from pending before executing (allows re-scheduling)
       pendingTimers.delete(sessionID)
-      // Register explicit in-flight state for this callback
-      const inflight = { cancelled: false }
-      let set = inflightSessions.get(sessionID)
-      if (!set) {
-        set = new Set()
-        inflightSessions.set(sessionID, set)
-      }
-      set.add(inflight)
-      try {
-        // Re-read TODOs at fire time (not at schedule time)
-        const raw = await ctx.client.session.todo({ path: { id: sessionID } })
-        // After the async gap — check if session was deleted while in-flight
-        if (inflight.cancelled) {
-          return
-        }
-        const todos = normalizeTodos(raw)
-
-        if (hasIncompleteTodo(todos)) {
-          await ctx.client.session.prompt({
-            sessionID,
-            text: CONTINUATION_PROMPT,
-          })
-        }
-      } catch {
-        // Swallow rejection — timer callbacks must not produce unhandled rejections.
-      } finally {
-        // Always remove this callback's inflight entry
-        set!.delete(inflight)
-        if (set!.size === 0) {
-          inflightSessions.delete(sessionID)
-        }
-      }
+      await executePrompt(sessionID)
     }, countdownSeconds * 1000)
 
     pendingTimers.set(sessionID, id)
@@ -112,6 +126,15 @@ export function createTodoContinuationEnforcer(
     if (eventType === "session.idle") {
       isIdle = true
       sessionID = extractSessionID(event)
+      // EasyCode parity: fall back to properties.session_id (snake_case) for session.idle
+      if (!sessionID) {
+        sessionID = extractIdlePropertiesSnakeSessionId(event)
+      }
+      // EasyCode parity: fall back to properties.info.id for session.idle when
+      // higher-priority extraction paths yield nothing
+      if (!sessionID) {
+        sessionID = extractIdleInfoId(event)
+      }
     } else if (eventType === "session.status") {
       if (isSessionStatusIdle(event)) {
         isIdle = true
@@ -120,10 +143,6 @@ export function createTodoContinuationEnforcer(
     }
 
     if (!isIdle || !sessionID) return
-
-    // Only target orchestrator and executor sessions
-    const role = options.getRole(sessionID)
-    if (!TARGET_ROLES.has(role)) return
 
     await schedulePrompt(sessionID)
   }

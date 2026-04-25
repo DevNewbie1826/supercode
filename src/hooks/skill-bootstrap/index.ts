@@ -1,9 +1,9 @@
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
 interface BootstrapPart {
   id: string
-  sessionID: string
+  sessionID?: string
   messageID: string
   type: "text"
   text: string
@@ -21,19 +21,44 @@ const BOOTSTRAP_MARKER_SUFFIX = "-supercode-bootstrap"
 /** Default TTL: 1 hour. Keeps bootstrap tracking bounded in long-running processes. */
 const DEFAULT_TTL_MS = 60 * 60 * 1000
 
+/**
+ * Ordered candidate paths for locating skill-bootstrap.md using caller-provided moduleDir.
+ * Must match the EasyCode-compatible candidate set from the approved spec.
+ */
+const BOOTSTRAP_CANDIDATES = [
+  (moduleDir: string) => join(moduleDir, "skill-bootstrap.md"),
+  (moduleDir: string) => join(moduleDir, "hooks", "skill-bootstrap", "skill-bootstrap.md"),
+  (moduleDir: string) => join(moduleDir, "..", "src", "hooks", "skill-bootstrap", "skill-bootstrap.md"),
+  (moduleDir: string) => join(moduleDir, "..", "..", "src", "hooks", "skill-bootstrap", "skill-bootstrap.md"),
+]
+
+/**
+ * Resolve bootstrap markdown content from the ordered candidate path set.
+ * Selects the first existing file; if that file is blank or unreadable,
+ * returns undefined (no fallthrough to later candidates).
+ */
+function resolveBootstrapContent(moduleDir: string): string | undefined {
+  for (const candidate of BOOTSTRAP_CANDIDATES) {
+    const candidatePath = candidate(moduleDir)
+    if (existsSync(candidatePath)) {
+      // First existing file wins — even if blank or unreadable
+      try {
+        const raw = readFileSync(candidatePath, "utf-8")
+        if (raw.trim().length > 0) return raw
+      } catch {
+        // Unreadable — still stop here, no fallthrough
+      }
+      return undefined
+    }
+  }
+  return undefined
+}
+
 export function createBootstrapTransform(
   bootstrapDir: string,
   options?: BootstrapTransformOptions,
 ) {
-  let bootstrapContent: string | undefined
-  try {
-    const raw = readFileSync(join(bootstrapDir, "skill-bootstrap.md"), "utf-8")
-    if (raw.trim().length > 0) {
-      bootstrapContent = raw
-    }
-  } catch {
-    // File doesn't exist or unreadable — safe no-op
-  }
+  const bootstrapContent = resolveBootstrapContent(bootstrapDir)
 
   const ttlMs = options?.ttlMs ?? DEFAULT_TTL_MS
   const now = options?.now ?? Date.now
@@ -63,14 +88,17 @@ export function createBootstrapTransform(
     const userMsg = output.messages.find((m) => m.info.role === "user")
     if (!userMsg) return
 
-    // Get session identifier
+    // Derive stable identity fields from the target user message
+    const messageID = userMsg.info.id
     const sessionID = userMsg.info.sessionID
-    if (!sessionID) return
+
+    // Use messageID as tracking key when sessionID is absent (EasyCode parity)
+    const trackingKey = sessionID ?? `msg:${messageID}`
 
     pruneExpired()
 
-    // Already bootstrapped for this session (in-memory tracking)
-    if (bootstrappedSessions.has(sessionID)) return
+    // Already bootstrapped for this session/message (in-memory tracking)
+    if (bootstrappedSessions.has(trackingKey)) return
 
     // Check for a preexisting Supercode-specific bootstrap part
     const hasExistingBootstrap = userMsg.parts.some(
@@ -81,13 +109,10 @@ export function createBootstrapTransform(
         p.id.endsWith(BOOTSTRAP_MARKER_SUFFIX),
     )
     if (hasExistingBootstrap) {
-      // Mark session so later transforms also stay no-op
-      bootstrappedSessions.set(sessionID, now())
+      // Mark so later transforms also stay no-op
+      bootstrappedSessions.set(trackingKey, now())
       return
     }
-
-    // Derive stable identity fields from the target user message
-    const messageID = userMsg.info.id
 
     // Prepend synthetic bootstrap part matching the real plugin message-part contract
     const bootstrapPart: BootstrapPart = {
@@ -100,6 +125,6 @@ export function createBootstrapTransform(
     }
     userMsg.parts.unshift(bootstrapPart)
 
-    bootstrappedSessions.set(sessionID, now())
+    bootstrappedSessions.set(trackingKey, now())
   }
 }

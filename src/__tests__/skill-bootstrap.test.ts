@@ -13,9 +13,12 @@ afterEach(() => {
 })
 
 function createBootstrapDir(content: string): string {
-  const dir = mkdtempSync(join(tmpdir(), "supercode-bootstrap-test-"))
+  const outer = mkdtempSync(join(tmpdir(), "supercode-bootstrap-test-"))
+  // Nest two levels deep so candidate 3/4 paths resolve within outer, not shared tmpdir
+  const dir = join(outer, "a", "b")
+  mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, "skill-bootstrap.md"), content)
-  tempDirs.push(dir)
+  tempDirs.push(outer)
   return dir
 }
 
@@ -445,6 +448,210 @@ describe("SkillBootstrap transform", () => {
       expect(bootstrap.id).toBeTruthy()
       expect(bootstrap.synthetic).toBe(true)
       expect(bootstrap.text).toBe("## Bootstrap Content")
+    })
+  })
+
+  describe("EasyCode parity — ordered candidate path resolution", () => {
+    it("finds skill-bootstrap.md at copied-plugin layout via candidate 3 (<moduleDir>/../src/hooks/skill-bootstrap/)", async () => {
+      // Simulate a copied plugin layout where moduleDir has no local skill-bootstrap.md
+      // but the file exists at the relative path used by copied .opencode/plugins layouts
+      const base = mkdtempSync(join(tmpdir(), "supercode-parity-copied-"))
+      tempDirs.push(base)
+      const moduleDir = join(base, "copied-plugin")
+      mkdirSync(moduleDir, { recursive: true })
+      // Create the file at candidate 3 resolution: moduleDir/../src/hooks/skill-bootstrap/skill-bootstrap.md
+      const candidateDir = join(base, "src", "hooks", "skill-bootstrap")
+      mkdirSync(candidateDir, { recursive: true })
+      writeFileSync(join(candidateDir, "skill-bootstrap.md"), "## Copied Plugin Bootstrap")
+
+      const transform = createBootstrapTransform(moduleDir)
+      const output = {
+        messages: [
+          {
+            info: { id: "msg-copied", sessionID: "sess-copied", role: "user" } as any,
+            parts: [{ id: "p-copied", sessionID: "sess-copied", messageID: "msg-copied", type: "text", text: "Hello" }],
+          },
+        ],
+      }
+
+      await transform({}, output)
+
+      // Should inject bootstrap from the copied-plugin layout candidate
+      expect(output.messages[0].parts.length).toBe(2)
+      const bootstrap = output.messages[0].parts[0] as Record<string, unknown>
+      expect(bootstrap.synthetic).toBe(true)
+      expect(bootstrap.text).toBe("## Copied Plugin Bootstrap")
+    })
+
+    it("prefers candidate 1 (<moduleDir>/skill-bootstrap.md) over later candidates", async () => {
+      const base = mkdtempSync(join(tmpdir(), "supercode-parity-order-"))
+      tempDirs.push(base)
+      // Place moduleDir inside base so candidate 3 resolves within base (not /tmp)
+      const moduleDir = join(base, "module")
+      mkdirSync(moduleDir, { recursive: true })
+
+      // Candidate 1: <moduleDir>/skill-bootstrap.md
+      writeFileSync(join(moduleDir, "skill-bootstrap.md"), "## First Candidate")
+
+      // Candidate 3: moduleDir/../src/hooks/skill-bootstrap/skill-bootstrap.md = base/src/hooks/.../skill-bootstrap.md
+      const candidate3Dir = join(base, "src", "hooks", "skill-bootstrap")
+      mkdirSync(candidate3Dir, { recursive: true })
+      writeFileSync(join(candidate3Dir, "skill-bootstrap.md"), "## Third Candidate")
+
+      const transform = createBootstrapTransform(moduleDir)
+      const output = {
+        messages: [
+          {
+            info: { id: "msg-order", sessionID: "sess-order", role: "user" } as any,
+            parts: [{ id: "p-order", sessionID: "sess-order", messageID: "msg-order", type: "text", text: "Hello" }],
+          },
+        ],
+      }
+
+      await transform({}, output)
+
+      expect(output.messages[0].parts.length).toBe(2)
+      const bootstrap = output.messages[0].parts[0] as Record<string, unknown>
+      expect(bootstrap.text).toBe("## First Candidate")
+    })
+
+    it("uses candidate 4 (<moduleDir>/../../src/hooks/skill-bootstrap/) when earlier candidates absent", async () => {
+      // moduleDir is nested two levels deep, no candidates 1-3 exist
+      const base = mkdtempSync(join(tmpdir(), "supercode-parity-c4-"))
+      tempDirs.push(base)
+      const moduleDir = join(base, "a", "b")
+      mkdirSync(moduleDir, { recursive: true })
+
+      // Candidate 4: moduleDir/../../src/hooks/skill-bootstrap/skill-bootstrap.md = base/src/hooks/skill-bootstrap/skill-bootstrap.md
+      const candidateDir = join(base, "src", "hooks", "skill-bootstrap")
+      mkdirSync(candidateDir, { recursive: true })
+      writeFileSync(join(candidateDir, "skill-bootstrap.md"), "## Fourth Candidate")
+
+      const transform = createBootstrapTransform(moduleDir)
+      const output = {
+        messages: [
+          {
+            info: { id: "msg-c4", sessionID: "sess-c4", role: "user" } as any,
+            parts: [{ id: "p-c4", sessionID: "sess-c4", messageID: "msg-c4", type: "text", text: "Hello" }],
+          },
+        ],
+      }
+
+      await transform({}, output)
+
+      expect(output.messages[0].parts.length).toBe(2)
+      const bootstrap = output.messages[0].parts[0] as Record<string, unknown>
+      expect(bootstrap.text).toBe("## Fourth Candidate")
+    })
+
+    it("safe no-op when no candidate file exists at any path", async () => {
+      const base = mkdtempSync(join(tmpdir(), "supercode-parity-noop-"))
+      tempDirs.push(base)
+      // Nest two levels deep so candidate 3/4 stay within base
+      const moduleDir = join(base, "a", "b")
+      mkdirSync(moduleDir, { recursive: true })
+
+      const transform = createBootstrapTransform(moduleDir)
+      const output = {
+        messages: [
+          {
+            info: { id: "msg-noop", sessionID: "sess-noop", role: "user" } as any,
+            parts: [{ id: "p-noop", sessionID: "sess-noop", messageID: "msg-noop", type: "text", text: "Hello" }],
+          },
+        ],
+      }
+
+      await transform({}, output)
+
+      // No injection — no candidate exists
+      expect(output.messages[0].parts.length).toBe(1)
+    })
+
+    it("no-ops when first existing candidate is blank — does not fall through to later candidates", async () => {
+      const base = mkdtempSync(join(tmpdir(), "supercode-parity-blank1-"))
+      tempDirs.push(base)
+      const moduleDir = join(base, "module")
+      mkdirSync(moduleDir, { recursive: true })
+
+      // Candidate 1: exists but is blank
+      writeFileSync(join(moduleDir, "skill-bootstrap.md"), "   \n  ")
+
+      // Candidate 3: exists with real content (would be found if fallthrough occurs)
+      const candidate3Dir = join(base, "src", "hooks", "skill-bootstrap")
+      mkdirSync(candidate3Dir, { recursive: true })
+      writeFileSync(join(candidate3Dir, "skill-bootstrap.md"), "## Third Candidate Should Not Be Used")
+
+      const transform = createBootstrapTransform(moduleDir)
+      const output = {
+        messages: [
+          {
+            info: { id: "msg-blank1", sessionID: "sess-blank1", role: "user" } as any,
+            parts: [{ id: "p-blank1", sessionID: "sess-blank1", messageID: "msg-blank1", type: "text", text: "Hello" }],
+          },
+        ],
+      }
+
+      await transform({}, output)
+
+      // No injection — first existing candidate was blank, must NOT fall through
+      expect(output.messages[0].parts.length).toBe(1)
+    })
+  })
+
+  describe("EasyCode parity — no-sessionID injection", () => {
+    it("injects bootstrap into first user message even without sessionID", async () => {
+      const dir = createBootstrapDir("## No Session Bootstrap")
+      const transform = createBootstrapTransform(dir)
+      const output = {
+        messages: [
+          {
+            // No sessionID on this message — EasyCode still injects, Supercode should too
+            info: { id: "msg-nosid", role: "user" } as any,
+            parts: [{ id: "p-nosid", messageID: "msg-nosid", type: "text", text: "Hello" }],
+          },
+        ],
+      }
+
+      await transform({}, output)
+
+      // Bootstrap part should be injected
+      expect(output.messages[0].parts.length).toBe(2)
+      const bootstrap = output.messages[0].parts[0] as Record<string, unknown>
+      expect(bootstrap.synthetic).toBe(true)
+      expect(bootstrap.text).toBe("## No Session Bootstrap")
+      expect(bootstrap.type).toBe("text")
+      expect(bootstrap.messageID).toBe("msg-nosid")
+      expect(typeof bootstrap.id).toBe("string")
+      expect((bootstrap.id as string).endsWith("-supercode-bootstrap")).toBe(true)
+    })
+
+    it("does not inject duplicate bootstrap when no sessionID — second call is no-op", async () => {
+      const dir = createBootstrapDir("## Guidance")
+      const transform = createBootstrapTransform(dir)
+
+      // First call: no sessionID — should inject
+      const output1 = {
+        messages: [
+          {
+            info: { id: "msg-dup-nosid-1", role: "user" } as any,
+            parts: [{ id: "p-dup1", messageID: "msg-dup-nosid-1", type: "text", text: "First" }],
+          },
+        ],
+      }
+      await transform({}, output1)
+      expect(output1.messages[0].parts.length).toBe(2)
+
+      // Second call: same message id — should NOT inject duplicate
+      const output2 = {
+        messages: [
+          {
+            info: { id: "msg-dup-nosid-1", role: "user" } as any,
+            parts: [{ id: "p-dup2", messageID: "msg-dup-nosid-1", type: "text", text: "Second" }],
+          },
+        ],
+      }
+      await transform({}, output2)
+      expect(output2.messages[0].parts.length).toBe(1) // only original part, no bootstrap
     })
   })
 })
