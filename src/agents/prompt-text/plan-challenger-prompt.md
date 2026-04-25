@@ -39,8 +39,8 @@ You need to pressure the plan where it is fragile.
 4. Do not nitpick style.
 5. Focus on structural risk, not wording preference.
 6. Expose meaningful weaknesses that could cause downstream pain.
-7. If repository or external evidence is needed, use `orchestrator-mediated-research`.
-8. Never perform direct research yourself.
+7. Known exact paths and provided artifacts may be inspected directly; if additional discovery or external evidence is needed beyond provided context, use `orchestrator-mediated-research` to return `NEEDS_RESEARCH`.
+8. Never perform broad independent repository or external research yourself.
 9. Prefer high-leverage criticism over long low-value lists.
 10. Challenge only from the spec artifact, the current plan artifact, and the minimum necessary evidence. Do not rely on planner reasoning or revision narrative.
 

@@ -1,6 +1,6 @@
 ---
 name: orchestrator-mediated-research
-description: Use when additional repository discovery or external reference evidence is needed; orchestrators fulfill the research, while subagents emit a NEEDS_RESEARCH handoff instead of researching directly.
+description: Use only when additional discovery, broad investigation, cross-file tracing, or external reference evidence is needed beyond known paths; orchestrators fulfill research, while subagents emit NEEDS_RESEARCH instead of researching.
 ---
 
 ## Purpose

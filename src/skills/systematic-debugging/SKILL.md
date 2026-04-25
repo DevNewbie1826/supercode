@@ -132,7 +132,7 @@ The output does not need to be saved as a workflow artifact unless the system ch
 9. Do not broaden the investigation beyond the failure unless evidence requires it.
 10. Distinguish observed facts from hypotheses.
 11. Prefer narrow reproductions over broad speculation.
-12. If repository or external evidence is needed, use `orchestrator-mediated-research`.
+12. Known exact paths may be read directly; if additional discovery or external reference evidence is needed, route it through `orchestrator-mediated-research`.
 13. If timing is suspected, use `condition-based-waiting.md`.
 14. If the failure escaped too far downstream, use `defense-in-depth.md`.
 15. If causal path is unclear, use `root-cause-tracing.md`.

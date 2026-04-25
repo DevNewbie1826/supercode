@@ -228,7 +228,7 @@ When editing:
 - avoid large mechanical rewrites unless explicitly required by the task
 
 After editing:
-- run executor-reported LSP diagnostics for changed files or affected workspace scope when available
+- require the executor to run LSP diagnostics for changed files or affected workspace scope when available
 - resolve syntax errors, type errors, missing imports, unresolved symbols, and obvious diagnostics before claiming completion
 - if diagnostics remain, explicitly report whether they are pre-existing, unrelated, non-blocking, or blocking
 - do not send work to review while new blocking LSP diagnostics remain unresolved
@@ -286,7 +286,7 @@ Fresh executor replacement is an escalation tool, not the default behavior.
 10. Never let reviewers modify files.
 11. Never bypass the aligned execution batches.
 12. If a bug, regression, failing test, or unexpected behavior appears, route through `systematic-debugging` before attempting a fix.
-13. If repository or external evidence is needed, use `orchestrator-mediated-research`.
+13. Known exact paths may be read directly; if additional discovery or external reference evidence is needed, route it through `orchestrator-mediated-research`.
 14. Do not begin execution in the main working tree.
 15. Require the isolated worktree prepared by `worktree`.
 16. Respect the approved spec and approved plan. Do not silently expand scope.
@@ -461,7 +461,7 @@ After all tasks are complete, run an execution-level final gate.
 This gate must verify:
 - the highest-level verification command from the plan
 - the relevant test or regression suite
-- executor-reported executor-reported LSP diagnostics for changed files or affected workspace scope when available
+- review executor-reported LSP diagnostics status for changed files or affected workspace scope when available
 - the final success criteria implied by execution scope
 - that no obvious implementation leftovers remain
 

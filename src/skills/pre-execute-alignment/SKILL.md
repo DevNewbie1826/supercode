@@ -86,8 +86,8 @@ This output does not need to be saved as a file unless your environment wants to
 5. Do not allow execution to infer missing verification criteria.
 6. Do not allow optimistic parallelism when conflicts are plausible.
 7. Use conservative batching when certainty is low.
-8. If repository or external evidence is needed, use `orchestrator-mediated-research`.
-9. Do not perform direct research outside that mechanism.
+8. Known exact paths may be read directly; if additional discovery or external reference evidence is needed, route it through `orchestrator-mediated-research`.
+9. Do not perform broad independent research outside that mechanism.
 10. Treat hidden dependency risk as a real blocker.
 11. Prefer blocking early over letting `execute` discover preventable coordination failures.
 12. `task-compliance-checker` is read-only and must not rewrite the plan.
