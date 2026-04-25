@@ -37,7 +37,7 @@ In scope:
 
 - Make `skill-bootstrap` locate `skill-bootstrap.md` using the exact EasyCode-compatible candidate path set listed below.
 - Make `skill-bootstrap` inject into the first user message even when `info.sessionID` is absent, without breaking duplicate prevention.
-- Make `todo-continuation-enforcer` continue sessions when idle events arrive for unclassified/`unknown` sessions with incomplete TODOs.
+- Make `todo-continuation-enforcer` match EasyCode's no-role-gate behavior: idle events with incomplete TODOs should be eligible for continuation regardless of resolver role.
 - Make `todo-continuation-enforcer` extract `sessionID` from `properties.info.id` for `session.idle` events when necessary, matching EasyCode's observed tolerance.
 - Make zero-second continuation countdowns execute immediately for deterministic behavior parity with EasyCode.
 - Add focused regression tests for each reproduced Supercode/EasyCode difference.
@@ -64,7 +64,7 @@ In scope:
   3. `<moduleDir>/../src/hooks/skill-bootstrap/skill-bootstrap.md`
   4. `<moduleDir>/../../src/hooks/skill-bootstrap/skill-bootstrap.md`
 - Bootstrap path resolution must use the first existing file from that ordered list and remain a safe no-op when none exists.
-- Preserve existing `other` role exclusion for continuation unless tests/spec explicitly require otherwise; only `unknown` should be newly tolerated.
+- Remove continuation role gating to match EasyCode; do not preserve `other` exclusion because EasyCode does not gate continuation by role.
 - Preserve session deletion cancellation semantics and timer cleanup behavior.
 - Full test suite and TypeScript typecheck must pass.
 
@@ -74,7 +74,7 @@ In scope:
 2. A copied-plugin-layout regression using `<moduleDir>/../src/hooks/skill-bootstrap/skill-bootstrap.md` proves Supercode bootstrap now finds and injects `skill-bootstrap.md` where it previously no-oped.
 3. A no-`info.sessionID` regression proves Supercode bootstrap now injects into the first user message where it previously no-oped.
 4. Existing bootstrap single-injection and duplicate-prevention tests still pass.
-5. A continuation regression proves `unknown` role idle sessions with incomplete TODOs now receive continuation prompts.
+5. Continuation regressions prove idle sessions with incomplete TODOs receive continuation prompts regardless of resolver role, including `unknown` and `other`.
 6. A continuation regression proves `session.idle` with `properties.info.id` can schedule/prompt.
 7. A continuation regression proves zero-second countdown executes immediately without waiting for a timer tick.
 8. Existing continuation deletion, reschedule, isolation, and error-swallowing tests still pass.
@@ -86,7 +86,7 @@ In scope:
 
 - The exact live OpenCode event/message shape may vary by version, but this spec only targets shapes already reproduced as EasyCode-compatible and Supercode-incompatible.
 - Removing the hard `sessionID` requirement from bootstrap may create bootstrap parts with undefined `sessionID`; this matches EasyCode behavior but must remain type-safe and should preserve `id`, `messageID`, `type`, `text`, and `synthetic` fields.
-- Adding `unknown` continuation behavior may prompt sessions before role seeding completes; this is intentional for parity with EasyCode and mirrors the previously fixed TODO guard unknown-session issue.
+- Removing continuation role gating may prompt sessions before role seeding completes or for sessions classified as `other`; this is intentional because EasyCode's continuation enforcer does not gate by role.
 
 ## Revisions
 

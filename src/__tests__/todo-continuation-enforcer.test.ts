@@ -4,11 +4,7 @@ import { createSessionRoleResolver } from "../hooks/session-role-resolver"
 import { createTodoContinuationEnforcer } from "../hooks/todo-continuation-enforcer"
 
 /**
- * T5 — Red tests for idle continuation enforcement.
- *
- * These tests define the continuation enforcement contract before any
- * production code exists. Every test is expected to fail due to missing
- * module exports or unimplemented behavior.
+ * Tests for idle continuation enforcement.
  *
  * Production surface under test:
  *   - createTodoContinuationEnforcer(ctx, options) → { handler }
@@ -16,17 +12,19 @@ import { createTodoContinuationEnforcer } from "../hooks/todo-continuation-enfor
  *   - options.countdownSeconds?: number (default 120)
  *   - options.timer?: { setTimeout, clearTimeout } — deterministic seam
  *
- * Session ID contract (matches shared resolver rules):
+ * Session ID contract (matches shared resolver rules + EasyCode parity):
  *   - Top-level `sessionID` and `session_id` are always valid.
- *   - `properties.info.id` is valid ONLY for `session.deleted` and
- *     `session.status` events (session-scoped fallback).
- *   - `properties.sessionID` is NOT an approved extraction path.
+ *   - `properties.sessionID` and `properties.session_id` are valid for
+ *     session.idle / session.status events.
+ *   - `properties.info.id` is valid as a session.idle fallback (EasyCode parity).
+ *   - `properties.sessionID` is NOT an approved extraction path for
+ *     non-session events.
  *   - `properties.info.id` is NOT valid for non-session-scoped events.
  *
  * Timer control contract:
  *   - The enforcer accepts an injected `timer` seam for deterministic testing.
  *   - Default countdown is 120 seconds when countdownSeconds is omitted.
- *   - `countdownSeconds: 0` still schedules via timer; tests control firing.
+ *   - `countdownSeconds: 0` executes immediately without timer scheduling.
  */
 
 // ---------------------------------------------------------------------------
@@ -270,7 +268,7 @@ describe("TodoContinuationEnforcer — session.idle session ID extraction", () =
     expect(prompts[0]!.sessionID).toBe("ses-snake")
   })
 
-  it("does NOT extract sessionID from properties.info.id for session.idle (not session-scoped)", async () => {
+  it("extracts sessionID from properties.info.id for session.idle (EasyCode parity)", async () => {
     const { ctx, prompts } = makeCtx([
       { content: "Work", status: "pending" },
     ])
@@ -290,8 +288,8 @@ describe("TodoContinuationEnforcer — session.idle session ID extraction", () =
     })
     await fake.firePending()
 
-    expect(prompts).toHaveLength(0)
-    expect(fake.pendingCount()).toBe(0)
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]!.sessionID).toBe("ses-info-fallback")
   })
 
   it("extracts sessionID from properties.sessionID for session.idle", async () => {
@@ -317,14 +315,38 @@ describe("TodoContinuationEnforcer — session.idle session ID extraction", () =
     expect(prompts).toHaveLength(1)
     expect(prompts[0]!.sessionID).toBe("ses-props-sid")
   })
+
+  it("extracts sessionID from properties.session_id for session.idle (EasyCode parity)", async () => {
+    const { ctx, prompts } = makeCtx([
+      { content: "Work", status: "pending" },
+    ])
+    const fake = createFakeTimers()
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 0,
+      getRole: () => "orchestrator" as SessionRole,
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: {
+        type: "session.idle",
+        properties: { session_id: "ses-props-snake" },
+      },
+    })
+    await fake.firePending()
+
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]!.sessionID).toBe("ses-props-snake")
+  })
 })
 
 // ---------------------------------------------------------------------------
-// 3. Non-target roles are skipped
+// 3. Role targeting — all roles prompt (EasyCode parity)
 // ---------------------------------------------------------------------------
 
 describe("TodoContinuationEnforcer — role targeting", () => {
-  it("does not re-prompt 'other' role sessions", async () => {
+  it("re-prompts 'other' role sessions (EasyCode parity — no role gate)", async () => {
     const { ctx, prompts } = makeCtx([
       { content: "Pending work", status: "pending" },
     ])
@@ -341,10 +363,11 @@ describe("TodoContinuationEnforcer — role targeting", () => {
     })
     await fake.firePending()
 
-    expect(prompts).toHaveLength(0)
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]!.sessionID).toBe("ses-other")
   })
 
-  it("does not re-prompt 'unknown' role sessions", async () => {
+  it("now re-prompts 'unknown' role sessions (EasyCode parity)", async () => {
     const { ctx, prompts } = makeCtx([
       { content: "Pending work", status: "pending" },
     ])
@@ -361,7 +384,58 @@ describe("TodoContinuationEnforcer — role targeting", () => {
     })
     await fake.firePending()
 
-    expect(prompts).toHaveLength(0)
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]!.sessionID).toBe("ses-unknown")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 3b. EasyCode parity — unknown role continuation
+// ---------------------------------------------------------------------------
+
+describe("TodoContinuationEnforcer — EasyCode parity unknown role continuation", () => {
+  it("re-prompts idle unknown-role session when incomplete todos remain", async () => {
+    const { ctx, prompts } = makeCtx([
+      { content: "Pending work for unknown session", status: "pending" },
+    ])
+    const fake = createFakeTimers()
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 0,
+      getRole: () => "unknown" as SessionRole,
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "ses-unknown-parity" },
+    })
+    await fake.firePending()
+
+    // EasyCode parity: unknown/unclassified sessions should receive continuation prompts
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]!.sessionID).toBe("ses-unknown-parity")
+  })
+
+  it("'other' role also prompts (EasyCode parity — no role gate)", async () => {
+    const { ctx, prompts } = makeCtx([
+      { content: "Pending work for other session", status: "pending" },
+    ])
+    const fake = createFakeTimers()
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 0,
+      getRole: () => "other" as SessionRole,
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "ses-other-parity" },
+    })
+    await fake.firePending()
+
+    // EasyCode parity: no role gate — 'other' also receives continuation prompts
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]!.sessionID).toBe("ses-other-parity")
   })
 })
 
@@ -446,7 +520,7 @@ describe("TodoContinuationEnforcer — session.status idle normalization", () =>
     expect(prompts).toHaveLength(0)
   })
 
-  it("does not prompt on session.status idle for non-target roles", async () => {
+  it("prompts on session.status idle for 'other' role (EasyCode parity — no role gate)", async () => {
     const { ctx, prompts } = makeCtx([
       { content: "Pending work", status: "pending" },
     ])
@@ -467,10 +541,11 @@ describe("TodoContinuationEnforcer — session.status idle normalization", () =>
     })
     await fake.firePending()
 
-    expect(prompts).toHaveLength(0)
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]!.sessionID).toBe("ses-status-other")
   })
 
-  it("does not prompt on session.status idle for unknown role", async () => {
+  it("prompts on session.status idle for unknown role (EasyCode parity)", async () => {
     const { ctx, prompts } = makeCtx([
       { content: "Pending work", status: "pending" },
     ])
@@ -491,7 +566,8 @@ describe("TodoContinuationEnforcer — session.status idle normalization", () =>
     })
     await fake.firePending()
 
-    expect(prompts).toHaveLength(0)
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]!.sessionID).toBe("ses-status-unknown")
   })
 })
 
@@ -586,7 +662,7 @@ describe("TodoContinuationEnforcer — countdown delay", () => {
     expect(prompts).toHaveLength(1)
   })
 
-  it("passes 0 delay when countdownSeconds is 0", async () => {
+  it("zero-second countdown executes immediately without scheduling a timer", async () => {
     const { ctx, prompts } = makeCtx([
       { content: "Pending work", status: "pending" },
     ])
@@ -602,17 +678,68 @@ describe("TodoContinuationEnforcer — countdown delay", () => {
       event: { type: "session.idle", sessionID: "ses-zero-cd" },
     })
 
-    expect(fake.lastScheduledDelayMs()).toBe(0)
+    // Zero-second: no timer scheduled, prompt sent immediately
+    expect(fake.lastScheduledDelayMs()).toBeUndefined()
+    expect(fake.pendingCount()).toBe(0)
+    expect(prompts).toHaveLength(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 7b. EasyCode parity — zero-second countdown executes immediately
+// ---------------------------------------------------------------------------
+
+describe("TodoContinuationEnforcer — EasyCode parity zero-second immediate execution", () => {
+  it("zero-second countdown executes immediately without timer tick", async () => {
+    const { ctx, prompts } = makeCtx([
+      { content: "Pending work", status: "pending" },
+    ])
+    const fake = createFakeTimers()
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 0,
+      getRole: () => "orchestrator" as SessionRole,
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "ses-zero-immediate" },
+    })
+
+    // EasyCode parity: zero-second countdown executes immediately —
+    // no need to advance timers or call firePending()
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]!.sessionID).toBe("ses-zero-immediate")
+    // No timer was scheduled
+    expect(fake.pendingCount()).toBe(0)
+  })
+
+  it("nonzero countdown still schedules via timer (no regression)", async () => {
+    const { ctx, prompts } = makeCtx([
+      { content: "Pending work", status: "pending" },
+    ])
+    const fake = createFakeTimers()
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 5,
+      getRole: () => "orchestrator" as SessionRole,
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "ses-nonzero-reg" },
+    })
+
+    // Nonzero countdown still schedules via timer — NOT immediate
+    expect(prompts).toHaveLength(0)
+    expect(fake.pendingCount()).toBe(1)
+    expect(fake.lastScheduledDelayMs()).toBe(5000)
 
     await fake.firePending()
 
     expect(prompts).toHaveLength(1)
   })
 })
-
-// ---------------------------------------------------------------------------
-// 8. Timer replacement — repeated idle events leave exactly one pending timer
-// ---------------------------------------------------------------------------
 
 describe("TodoContinuationEnforcer — timer replacement", () => {
   it("repeated idle events produce exactly one prompt (first timer is replaced, not accumulated)", async () => {
@@ -795,17 +922,14 @@ describe("TodoContinuationEnforcer — timer bookkeeping after fire", () => {
     await enforcer.handler({
       event: { type: "session.idle", sessionID: "ses-resched" },
     })
-    await fake.firePending()
+    // Zero-second: immediate execution, no firePending needed
     expect(prompts).toHaveLength(1)
-
     expect(fake.pendingCount()).toBe(0)
 
     await enforcer.handler({
       event: { type: "session.idle", sessionID: "ses-resched" },
     })
-    expect(fake.pendingCount()).toBe(1)
-
-    await fake.firePending()
+    // Second idle also executes immediately
     expect(prompts).toHaveLength(2)
     expect(prompts[1]!.sessionID).toBe("ses-resched")
   })
@@ -1034,7 +1158,7 @@ describe("TodoContinuationEnforcer — mixed todo states", () => {
 // ---------------------------------------------------------------------------
 
 describe("TodoContinuationEnforcer — session-scoped TODO call shape", () => {
-  it("calls todo with { path: { id: sessionID } } at fire time", async () => {
+  it("calls todo with { path: { id: sessionID } } immediately for zero-second countdown", async () => {
     const { ctx, prompts, todoCalls } = makeCtx([
       { content: "Pending work", status: "pending" },
     ])
@@ -1049,9 +1173,7 @@ describe("TodoContinuationEnforcer — session-scoped TODO call shape", () => {
     await enforcer.handler({
       event: { type: "session.idle", sessionID: "ses-call-shape" },
     })
-    expect(todoCalls).toHaveLength(0) // not called at schedule time
-    await fake.firePending()
-
+    // Zero-second: todo called immediately during handler execution
     expect(prompts).toHaveLength(1)
     expect(todoCalls).toHaveLength(1)
     expect(todoCalls[0]).toEqual({ path: { id: "ses-call-shape" } })
@@ -1155,7 +1277,7 @@ describe("TodoContinuationEnforcer — deletion during inflight continuation", (
     const fake = createFakeTimers()
 
     const enforcer = createTodoContinuationEnforcer(ctx, {
-      countdownSeconds: 0,
+      countdownSeconds: 1,
       getRole: () => "orchestrator" as SessionRole,
       timer: fake,
     })
@@ -1216,7 +1338,7 @@ describe("TodoContinuationEnforcer — deletion during inflight continuation", (
     const fake = createFakeTimers()
 
     const enforcer = createTodoContinuationEnforcer(ctx, {
-      countdownSeconds: 0,
+      countdownSeconds: 1,
       getRole: () => "orchestrator" as SessionRole,
       timer: fake,
     })
@@ -1310,7 +1432,7 @@ describe("TodoContinuationEnforcer — explicit inflight tracking", () => {
     const fake = createFakeTimers()
 
     const enforcer = createTodoContinuationEnforcer(ctx, {
-      countdownSeconds: 0,
+      countdownSeconds: 1,
       getRole: () => "orchestrator" as SessionRole,
       timer: fake,
     })
@@ -1379,7 +1501,7 @@ describe("TodoContinuationEnforcer — overlapping same-session inflight callbac
     const fake = createFakeTimers()
 
     const enforcer = createTodoContinuationEnforcer(ctx, {
-      countdownSeconds: 0,
+      countdownSeconds: 1,
       getRole: () => "orchestrator" as SessionRole,
       timer: fake,
     })
@@ -1446,7 +1568,7 @@ describe("TodoContinuationEnforcer — overlapping same-session inflight callbac
     const fake = createFakeTimers()
 
     const enforcer = createTodoContinuationEnforcer(ctx, {
-      countdownSeconds: 0,
+      countdownSeconds: 1,
       getRole: () => "orchestrator" as SessionRole,
       timer: fake,
     })
@@ -1590,7 +1712,7 @@ describe("TodoContinuationEnforcer — real resolver integration", () => {
     expect(prompts[0]!.sessionID).toBe("sess-cont-exec")
   })
 
-  it("continuation skips unseeded (unknown) session", async () => {
+  it("continuation prompts unseeded (unknown) session (EasyCode parity)", async () => {
     const resolver = createSessionRoleResolver()
     // No seeding — session stays unknown
 
@@ -1619,6 +1741,8 @@ describe("TodoContinuationEnforcer — real resolver integration", () => {
     })
     await fake.firePending()
 
-    expect(prompts).toHaveLength(0)
+    // Unknown sessions now prompt (EasyCode parity)
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]!.sessionID).toBe("sess-cont-unknown")
   })
 })
