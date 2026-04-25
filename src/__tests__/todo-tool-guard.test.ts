@@ -264,10 +264,32 @@ describe("TodoToolGuard", () => {
     })
   })
 
-  // ── before guard: non-orchestrator roles are never blocked ───────
+  // ── before guard: role-specific policy ─────────────────────────────
 
-  describe("before guard – non-orchestrator roles not blocked", () => {
-    for (const role of ["executor", "other", "unknown"] as SessionRole[]) {
+  describe("before guard – unknown sessions are guarded like orchestrator", () => {
+    it("blocks 'unknown' session with empty todo", async () => {
+      const guard = makeGuard("unknown", makeCtx([]))
+      await expect(
+        guard.before(
+          { tool: "read", sessionID: "ses_1", callID: "c1" },
+          { args: {} },
+        ),
+      ).rejects.toThrow(/TODO/i)
+    })
+
+    it("allows 'unknown' session with existing todo", async () => {
+      const guard = makeGuard("unknown", makeCtx(SAMPLE_TODOS))
+      await expect(
+        guard.before(
+          { tool: "read", sessionID: "ses_1", callID: "c1" },
+          { args: {} },
+        ),
+      ).resolves.toBeUndefined()
+    })
+  })
+
+  describe("before guard – executor and other roles skipped", () => {
+    for (const role of ["executor", "other"] as SessionRole[]) {
       it(`does not block '${role}' session with empty todo`, async () => {
         const guard = makeGuard(role, makeCtx([]))
         await expect(
@@ -854,10 +876,24 @@ describe("TodoToolGuard", () => {
     })
   })
 
-  // ── after guard: non-orchestrator sessions not reminded ──────────
+  // ── after guard: role-specific policy ─────────────────────────────
 
-  describe("after guard – non-orchestrator sessions skipped", () => {
-    for (const role of ["executor", "other", "unknown"] as SessionRole[]) {
+  describe("after guard – unknown sessions are eligible for reminders", () => {
+    it("attaches reminder for 'unknown' session after 20 non-todowrite calls", async () => {
+      const guard = makeGuard("unknown")
+      await primeAfterCalls(guard, 19, "ses_1")
+
+      const output: AfterOutput = { title: "result", output: "text 20" }
+      await guard.after(
+        { tool: "read", sessionID: "ses_1", callID: "c20", args: {} },
+        output,
+      )
+      expect(textOf(output)).toContain("TODO")
+    })
+  })
+
+  describe("after guard – executor and other sessions skipped", () => {
+    for (const role of ["executor", "other"] as SessionRole[]) {
       it(`does not attach reminders for '${role}' sessions`, async () => {
         const guard = makeGuard(role)
         for (let i = 0; i < 20; i++) {
@@ -1101,7 +1137,7 @@ describe("TodoToolGuard", () => {
       ).rejects.toThrow(/TODO/i)
     })
 
-    it("unseeded session (unknown) bypasses guard with no TODO", async () => {
+    it("unseeded session (unknown) is blocked by guard with no TODO", async () => {
       const resolver = createSessionRoleResolver()
       const guard = createTodoToolGuard(makeCtx([]), { roleResolver: resolver })
 
@@ -1111,10 +1147,10 @@ describe("TodoToolGuard", () => {
           { tool: "read", sessionID: "sess-real-unknown", callID: "c1" },
           { args: {} },
         ),
-      ).resolves.toBeUndefined()
+      ).rejects.toThrow(/TODO/i)
     })
 
-    it("seeded executor bypasses guard (only orchestrator blocked)", async () => {
+    it("seeded executor bypasses guard (known executor skipped)", async () => {
       const resolver = createSessionRoleResolver()
       const guard = createTodoToolGuard(makeCtx([]), { roleResolver: resolver })
 

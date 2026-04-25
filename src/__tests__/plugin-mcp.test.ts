@@ -150,7 +150,7 @@ describe("SupercodePlugin – event seeding enables guard enforcement", () => {
     ).rejects.toThrow(/TODO/i)
   })
 
-  it("unseeded session is NOT blocked by tool.execute.before", async () => {
+  it("unseeded/unknown session is blocked by tool.execute.before when TODO state is empty", async () => {
     const directory = createDirectoryWithSupercodeConfig("{}")
     const hooks = await SupercodePlugin({
       client: {
@@ -167,16 +167,16 @@ describe("SupercodePlugin – event seeding enables guard enforcement", () => {
       $: {} as PluginInput["$"],
     } as unknown as PluginInput)
 
-    // No event seeding — session is unknown
+    // No event seeding — session is unknown; guard must block conservatively
     await expect(
       hooks["tool.execute.before"]!(
         { tool: "read", sessionID: "sess-integ-unknown", callID: "c1" },
         { args: {} },
       ),
-    ).resolves.toBeUndefined()
+    ).rejects.toThrow(/TODO/i)
   })
 
-  it("seeded executor is NOT blocked by tool.execute.before (only orchestrator is blocked)", async () => {
+  it("seeded executor is NOT blocked by tool.execute.before (known executor is skipped)", async () => {
     const directory = createDirectoryWithSupercodeConfig("{}")
     const hooks = await SupercodePlugin({
       client: {
@@ -196,7 +196,7 @@ describe("SupercodePlugin – event seeding enables guard enforcement", () => {
     // Seed child session lifecycle
     await hooks.event!({ event: sessionCreated("sess-integ-exec", { parentID: "parent" }) })
 
-    // Executor should not be blocked (guard only blocks orchestrator)
+    // Executor should not be blocked (guard skips known executor)
     await expect(
       hooks["tool.execute.before"]!(
         { tool: "read", sessionID: "sess-integ-exec", callID: "c1" },
