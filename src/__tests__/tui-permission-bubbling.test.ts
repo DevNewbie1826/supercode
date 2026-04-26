@@ -143,6 +143,14 @@ interface MockSessionInfo {
   parentID?: string
 }
 
+/** Toast call captured by the spy. */
+interface CapturedToast {
+  variant?: string
+  title?: string
+  message: string
+  duration?: number
+}
+
 const activeHarnesses = new Set<ReturnType<typeof createMockHarness>>()
 
 afterEach(() => {
@@ -163,6 +171,7 @@ function createMockHarness(sessionDB?: Map<string, MockSessionInfo>) {
   const capturedHandlers: CapturedHandler[] = []
   const replyCalls: PermissionReplyCall[] = []
   const dialogStack: CapturedDialog[] = []
+  const toastCalls: CapturedToast[] = []
   const permissionState = new Map<string, PermissionRequest[]>()
   const kvSetCalls: Array<{ key: string; value: unknown }> = []
   let permissionListData: PermissionRequest[] = []
@@ -305,7 +314,7 @@ function createMockHarness(sessionDB?: Map<string, MockSessionInfo>) {
       DialogSelect: DialogSelectMock as any,
       Slot: ((() => null) as any),
       Prompt: ((() => null) as any),
-      toast: () => {},
+      toast: (input: { variant?: string; title?: string; message: string; duration?: number }) => { toastCalls.push(input) },
       dialog,
     },
     keybind: {
@@ -357,6 +366,7 @@ function createMockHarness(sessionDB?: Map<string, MockSessionInfo>) {
     capturedHandlers,
     replyCalls,
     dialogStack,
+    toastCalls,
     permissionState,
     sessionDB: _sessionDB,
     eventBus,
@@ -1787,5 +1797,233 @@ describe("T4 — observability/status instrumentation", () => {
     expect(postDispose.dialogOpen).toBe(0)
     expect(postDispose.completed).toBe(0)
     expect(postDispose.dismissed).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// T5: Debug toasts (opt-in visible runtime diagnostics)
+// ---------------------------------------------------------------------------
+
+describe("T5 — debug toasts", () => {
+  it("no toasts emitted by default (debugToasts undefined)", async () => {
+    const h = createMockHarness()
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS }, h.meta)
+
+    expect(h.toastCalls.length).toBe(0)
+  })
+
+  it("no toasts emitted when debugToasts is false", async () => {
+    const h = createMockHarness()
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS, debugToasts: false }, h.meta)
+
+    expect(h.toastCalls.length).toBe(0)
+  })
+
+  it("plugin loaded toast emitted when debugToasts is true", async () => {
+    const h = createMockHarness()
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS, debugToasts: true }, h.meta)
+
+    const loadedToasts = h.toastCalls.filter((t) => t.message.includes("supercode loaded"))
+    expect(loadedToasts.length).toBe(1)
+    // Should include meta info (spec/target)
+    expect(loadedToasts[0].message).toContain("supercode")
+    expect(loadedToasts[0].message).toContain("tui")
+  })
+
+  it("plugins.list status toast emitted when debugToasts is true", async () => {
+    const h = createMockHarness()
+    let listCalled = false
+    const origPluginsList = h.api.plugins.list
+    h.api.plugins.list = () => {
+      listCalled = true
+      return origPluginsList()
+    }
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS, debugToasts: true }, h.meta)
+
+    const pluginListToasts = h.toastCalls.filter((t) => t.message.includes("plugin status"))
+    expect(pluginListToasts.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it("polling started toast includes interval when debugToasts is true", async () => {
+    const h = createMockHarness()
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: 50, debugToasts: true }, h.meta)
+
+    const pollToasts = h.toastCalls.filter((t) => t.message.includes("polling"))
+    expect(pollToasts.length).toBeGreaterThanOrEqual(1)
+    expect(pollToasts[0].message).toContain("50")
+  })
+
+  it("immediate poll executes without waiting for interval when debugToasts is true", async () => {
+    const h = createMockHarness()
+    let listCallCount = 0
+    h.client.permission.list = async () => {
+      listCallCount++
+      return { data: [], error: undefined } as any
+    }
+
+    // Use a long interval to prove immediate poll happens before timer fires
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: 5000, debugToasts: true }, h.meta)
+
+    // Allow microtasks to flush (the immediate poll is async)
+    await new Promise((r) => setTimeout(r, 5))
+
+    // Should have been called at least once (immediate poll) without waiting 5s
+    expect(listCallCount).toBeGreaterThanOrEqual(1)
+
+    const immediateToast = h.toastCalls.find((t) => t.message.includes("immediate poll"))
+    expect(immediateToast).toBeDefined()
+  })
+
+  it("permission.list success toast includes count when debugToasts is true", async () => {
+    const h = createMockHarness()
+
+    h.setPermissionListData([
+      {
+        id: "req-toast-list-1",
+        sessionID: "sess-child",
+        permission: "edit",
+        patterns: ["src/**/*.ts"],
+        metadata: {},
+        always: [],
+      },
+      {
+        id: "req-toast-list-2",
+        sessionID: "sess-child",
+        permission: "edit",
+        patterns: ["src/**/*.ts"],
+        metadata: {},
+        always: [],
+      },
+    ])
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS, debugToasts: true }, h.meta)
+
+    await new Promise((r) => setTimeout(r, 20))
+
+    const listToasts = h.toastCalls.filter((t) => t.message.includes("permission.list"))
+    expect(listToasts.length).toBeGreaterThanOrEqual(1)
+    // Should mention the count of pending permissions
+    expect(listToasts[0].message).toContain("2")
+  })
+
+  it("permission.list error toast emitted on failure when debugToasts is true", async () => {
+    const h = createMockHarness()
+
+    h.client.permission.list = async () => ({ data: undefined, error: { message: "fail" } } as any)
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS, debugToasts: true }, h.meta)
+
+    await new Promise((r) => setTimeout(r, 20))
+
+    const errorToasts = h.toastCalls.filter((t) => t.message.includes("permission.list") && t.message.includes("error"))
+    expect(errorToasts.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it("per-request classification toast emitted for routable request when debugToasts is true", async () => {
+    const h = createMockHarness()
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS, debugToasts: true }, h.meta)
+
+    const sessionCreatedHandler = findHandler(h, "session.created")!
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-root"))
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-child", "sess-root"))
+
+    const permAskedHandler = findHandler(h, "permission.asked")!
+    permAskedHandler.handler(makePermissionAskedEvent("req-classify-1", "sess-child"))
+
+    const classToasts = h.toastCalls.filter((t) => t.message.includes("routable") || t.message.includes("classification"))
+    expect(classToasts.length).toBeGreaterThanOrEqual(1)
+    // Should mention root session
+    expect(classToasts[0].message).toContain("sess-root")
+  })
+
+  it("per-request classification toast mentions root and backfill outcome", async () => {
+    const sessionDB = new Map<string, MockSessionInfo>()
+    sessionDB.set("sess-root", { id: "sess-root" })
+    sessionDB.set("sess-bf-child", { id: "sess-bf-child", parentID: "sess-root" })
+
+    const h = createMockHarness(sessionDB)
+
+    h.client.session.get = async (params: { sessionID: string }) => {
+      const info = sessionDB.get(params.sessionID)
+      return { data: info ?? { id: params.sessionID }, error: undefined } as any
+    }
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS, debugToasts: true }, h.meta)
+
+    const permAskedHandler = findHandler(h, "permission.asked")!
+    permAskedHandler.handler(makePermissionAskedEvent("req-bf-class", "sess-bf-child"))
+
+    // Wait for async backfill + toast
+    await new Promise((r) => setTimeout(r, 10))
+
+    const bfToasts = h.toastCalls.filter((t) => t.message.includes("backfill"))
+    expect(bfToasts.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it("dialog opened toast emitted when debugToasts is true", async () => {
+    const h = createMockHarness()
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS, debugToasts: true }, h.meta)
+
+    const sessionCreatedHandler = findHandler(h, "session.created")!
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-root"))
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-child", "sess-root"))
+
+    const permAskedHandler = findHandler(h, "permission.asked")!
+    permAskedHandler.handler(makePermissionAskedEvent("req-dialog-toast", "sess-child"))
+
+    const dialogToasts = h.toastCalls.filter((t) => t.message.includes("dialog opened") || t.message.includes("dialog open"))
+    expect(dialogToasts.length).toBeGreaterThanOrEqual(1)
+    expect(dialogToasts[0].message).toContain("req-dialog-toast")
+  })
+
+  it("dialog replied toast emitted on user action when debugToasts is true", async () => {
+    const h = createMockHarness()
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS, debugToasts: true }, h.meta)
+
+    const sessionCreatedHandler = findHandler(h, "session.created")!
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-root"))
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-child", "sess-root"))
+
+    const permAskedHandler = findHandler(h, "permission.asked")!
+    permAskedHandler.handler(makePermissionAskedEvent("req-reply-toast", "sess-child"))
+
+    expect(h.dialogStack.length).toBe(1)
+    const rendered = h.dialogStack[0].render() as { props: { options: any[] } }
+    const onceOpt = rendered.props.options.find((o: any) => o.value === "once")
+    expect(onceOpt).toBeDefined()
+    if (onceOpt?.onSelect) await onceOpt.onSelect()
+
+    const replyToasts = h.toastCalls.filter((t) => t.message.includes("dialog replied"))
+    expect(replyToasts.length).toBeGreaterThanOrEqual(1)
+    expect(replyToasts[0].message).toContain("once")
+  })
+
+  it("dialog dismissed toast emitted on close when debugToasts is true", async () => {
+    const h = createMockHarness()
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS, debugToasts: true }, h.meta)
+
+    const sessionCreatedHandler = findHandler(h, "session.created")!
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-root"))
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-child", "sess-root"))
+
+    const permAskedHandler = findHandler(h, "permission.asked")!
+    permAskedHandler.handler(makePermissionAskedEvent("req-dismiss-toast", "sess-child"))
+
+    expect(h.dialogStack.length).toBe(1)
+    const onClose = h.dialogStack[0].onClose
+    if (onClose) onClose()
+
+    const dismissToasts = h.toastCalls.filter((t) => t.message.includes("dismissed") || t.message.includes("dismiss"))
+    expect(dismissToasts.length).toBeGreaterThanOrEqual(1)
+    expect(dismissToasts[0].message).toContain("req-dismiss-toast")
   })
 })

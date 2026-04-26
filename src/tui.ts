@@ -44,6 +44,14 @@ export interface SupercodeTuiPluginOptions {
    * Values below MIN_POLL_INTERVAL_MS are clamped.
    */
   pollIntervalMs?: number
+
+  /**
+   * When true, emit visible runtime diagnostic toasts via api.ui.toast for
+   * key plugin lifecycle events: load, polling start, immediate poll,
+   * permission.list results, per-request classification, and dialog
+   * open/reply/dismiss. Off by default.
+   */
+  debugToasts?: boolean
 }
 
 export const SupercodeTuiPlugin: TuiPluginModule = {
@@ -54,6 +62,17 @@ export const SupercodeTuiPlugin: TuiPluginModule = {
       MIN_POLL_INTERVAL_MS,
       pluginOptions.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
     )
+    const debugToasts = pluginOptions.debugToasts === true
+
+    /** Emit a diagnostic toast when debugToasts is enabled. */
+    function debugToast(message: string, variant: "info" | "success" | "warning" | "error" = "info"): void {
+      if (!debugToasts) return
+      try {
+        api.ui.toast({ message, variant })
+      } catch {
+        // toast may not be available in all environments
+      }
+    }
 
     const resolver = createSessionRoleResolver()
     const bubblingState = createPermissionBubblingState()
@@ -61,6 +80,32 @@ export const SupercodeTuiPlugin: TuiPluginModule = {
     let disposed = false
     let pollInFlight = false
     let pollTimer: ReturnType<typeof setInterval> | undefined
+
+    // -----------------------------------------------------------------------
+    // Debug: plugin loaded toast
+    // -----------------------------------------------------------------------
+
+    if (debugToasts) {
+      const metaInfo: string[] = ["supercode loaded"]
+      if (_meta) {
+        if ("spec" in _meta && _meta.spec) metaInfo.push(`spec=${_meta.spec}`)
+        if ("target" in _meta && _meta.target) metaInfo.push(`target=${_meta.target}`)
+      }
+      debugToast(metaInfo.join(" "))
+
+      // Emit plugins.list supercode status
+      try {
+        const plugins = api.plugins.list()
+        const supercodePlugin = plugins.find((p) => p.id === "supercode")
+        if (supercodePlugin) {
+          debugToast(`plugin status: supercode active=${supercodePlugin.active} enabled=${supercodePlugin.enabled}`)
+        } else {
+          debugToast("plugin status: supercode not found in plugins.list")
+        }
+      } catch {
+        debugToast("plugin status: plugins.list unavailable")
+      }
+    }
 
     // -----------------------------------------------------------------------
     // Bounded safe parent-chain backfill
@@ -100,6 +145,7 @@ export const SupercodeTuiPlugin: TuiPluginModule = {
 
         if (!session.parentID) {
           // Reached a root session
+          debugToast(`backfill resolved root: ${currentID} for session ${sessionID}`)
           return currentID
         }
 
@@ -125,12 +171,16 @@ export const SupercodeTuiPlugin: TuiPluginModule = {
       const getRootID = (sid: string) => resolver.getRootSessionID(sid)
       const decision = bubblingState.observeAsked(normalizedReq, getRootID)
 
+      debugToast(`classification: ${decision.classification} for req ${normalizedReq.id} session ${normalizedReq.sessionID}${decision.rootSessionID ? ` root ${decision.rootSessionID}` : ""}`)
+
       if (decision.classification !== "routable") return
 
       // Mark dialog open to prevent duplicates
       bubblingState.markDialogOpen(normalizedReq.id)
 
       const rootSessionID = decision.rootSessionID!
+
+      debugToast(`dialog opened: req ${normalizedReq.id} session ${normalizedReq.sessionID} → root ${rootSessionID}`)
 
       // -- Reply handler: send user decision to original request ID --------
       const handleReply = async (reply: "once" | "always" | "reject") => {
@@ -143,12 +193,14 @@ export const SupercodeTuiPlugin: TuiPluginModule = {
           // Best effort — the request may have been handled by another source
         }
         bubblingState.observeReplied(normalizedReq.id)
+        debugToast(`dialog replied: req ${normalizedReq.id} reply=${reply}`)
         api.ui.dialog.clear()
       }
 
       // -- Dismiss handler: cancel/error, no reply sent --------------------
       const handleDismiss = () => {
         bubblingState.markDialogDismissed(normalizedReq.id)
+        debugToast(`dialog dismissed: req ${normalizedReq.id}`)
         api.ui.dialog.clear()
       }
 
@@ -248,8 +300,12 @@ export const SupercodeTuiPlugin: TuiPluginModule = {
       try {
         let listed: PermissionRequest[] = []
         const result = await api.client.permission.list()
-        if (result.error || !result.data) return
+        if (result.error || !result.data) {
+          debugToast(`permission.list error: ${result.error ?? "no data"}`, "warning")
+          return
+        }
         listed = result.data as PermissionRequest[]
+        debugToast(`permission.list success: ${listed.length} pending`)
 
         if (disposed) return
 
@@ -356,9 +412,16 @@ export const SupercodeTuiPlugin: TuiPluginModule = {
     // Pending permission fallback: start periodic polling
     // -----------------------------------------------------------------------
 
+    debugToast(`polling started: interval=${pollIntervalMs}ms`)
+
     pollTimer = setInterval(() => {
       pollPendingPermissions()
     }, pollIntervalMs)
+
+    // Trigger one immediate poll so permissions discovered before the first
+    // interval tick are handled without delay.
+    debugToast("immediate poll executing")
+    pollPendingPermissions()
 
     // -----------------------------------------------------------------------
     // Lifecycle disposal
