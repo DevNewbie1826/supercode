@@ -40,6 +40,15 @@ export type RequestStatus = "pending" | "dialog-open" | "completed" | "dismissed
 /** Maximum untracked reply IDs retained for async backfill race suppression. */
 const MAX_PRE_REPLIED = 1000
 
+/** Statistics snapshot for observability. */
+export interface PermissionBubblingStats {
+  pending: number
+  dialogOpen: number
+  completed: number
+  dismissed: number
+  totalTracked: number
+}
+
 /** Result of an observeAsked call. */
 export interface RoutingDecision {
   classification: RequestClassification
@@ -101,6 +110,12 @@ export interface PermissionBubblingState {
    * Returns undefined for root, unresolved, and never-observed requests.
    */
   getRequestStatus(requestID: string): RequestStatus | undefined
+
+  /**
+   * Return a snapshot of tracked request counts for observability.
+   * Counts are grouped by current status.
+   */
+  getStats(): PermissionBubblingStats
 
   /** Clear all tracked state. */
   dispose(): void
@@ -254,6 +269,22 @@ export function createPermissionBubblingState(): PermissionBubblingState {
     return tracked.get(requestID)?.status
   }
 
+  function getStats(): PermissionBubblingStats {
+    let pending = 0
+    let dialogOpen = 0
+    let completed = 0
+    let dismissed = 0
+    for (const entry of tracked.values()) {
+      switch (entry.status) {
+        case "pending": pending++; break
+        case "dialog-open": dialogOpen++; break
+        case "completed": completed++; break
+        case "dismissed": dismissed++; break
+      }
+    }
+    return { pending, dialogOpen, completed, dismissed, totalTracked: tracked.size }
+  }
+
   function dispose(): void {
     tracked.clear()
     preReplied.clear()
@@ -266,6 +297,7 @@ export function createPermissionBubblingState(): PermissionBubblingState {
     markDialogOpen,
     markDialogDismissed,
     getRequestStatus,
+    getStats,
     dispose,
   }
 }

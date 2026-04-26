@@ -8,6 +8,12 @@
  * Root-session, unresolved-parent-chain, and dismissed requests are left
  * under OpenCode's normal ask behavior. At most one Supercode dialog is
  * ever opened for a given permission request ID.
+ *
+ * A periodic fallback polls `api.client.permission.list()` to discover
+ * pending permissions that were not delivered via `permission.asked` events
+ * (e.g., grandchild requests whose events did not propagate to the root TUI).
+ * Discovered permissions are fed through the same normalization, backfill,
+ * and duplicate suppression pipeline.
  */
 
 import type { TuiPluginModule } from "@opencode-ai/plugin/tui"
@@ -24,13 +30,37 @@ import {
 /** Maximum depth for bounded parent-chain backfill via client.session.get. */
 const BACKFILL_MAX_DEPTH = 10
 
+/** Default polling interval for the pending permission fallback (ms). */
+const DEFAULT_POLL_INTERVAL_MS = 5000
+
+/** Minimum polling interval to prevent CPU abuse (ms). */
+const MIN_POLL_INTERVAL_MS = 10
+
+/** Configuration options for the Supercode TUI plugin. */
+export interface SupercodeTuiPluginOptions {
+  /**
+   * Polling interval for the pending permission fallback in milliseconds.
+   * Set to 0 or undefined to use the default (5000ms).
+   * Values below MIN_POLL_INTERVAL_MS are clamped.
+   */
+  pollIntervalMs?: number
+}
+
 export const SupercodeTuiPlugin: TuiPluginModule = {
   id: "supercode",
   tui: async (api, _options, _meta) => {
+    const pluginOptions = (_options ?? {}) as SupercodeTuiPluginOptions
+    const pollIntervalMs = Math.max(
+      MIN_POLL_INTERVAL_MS,
+      pluginOptions.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
+    )
+
     const resolver = createSessionRoleResolver()
     const bubblingState = createPermissionBubblingState()
     const disposers: (() => void)[] = []
     let disposed = false
+    let pollInFlight = false
+    let pollTimer: ReturnType<typeof setInterval> | undefined
 
     // -----------------------------------------------------------------------
     // Bounded safe parent-chain backfill
@@ -86,6 +116,12 @@ export const SupercodeTuiPlugin: TuiPluginModule = {
     // -----------------------------------------------------------------------
 
     function processPermissionAsked(normalizedReq: NormalizedPermissionRequest): void {
+      // One-at-a-time policy: if a Supercode dialog is already open for a
+      // different request, do NOT track or suppress this one. Leaving it
+      // untracked lets a later poll surface it after the current dialog
+      // is resolved or dismissed. This applies to both event and poll paths.
+      if (hasCustomDialogOpen()) return
+
       const getRootID = (sid: string) => resolver.getRootSessionID(sid)
       const decision = bubblingState.observeAsked(normalizedReq, getRootID)
 
@@ -178,6 +214,84 @@ export const SupercodeTuiPlugin: TuiPluginModule = {
     }
 
     // -----------------------------------------------------------------------
+    // Observability: stats snapshot stored in kv
+    // -----------------------------------------------------------------------
+
+    function updateStats(): void {
+      try {
+        api.kv.set("supercode:permission-bubbling:stats", bubblingState.getStats())
+      } catch {
+        // kv may not be available in all environments; ignore silently
+      }
+    }
+
+    function hasCustomDialogOpen(): boolean {
+      return bubblingState.getStats().dialogOpen > 0
+    }
+
+    // -----------------------------------------------------------------------
+    // Pending permission fallback via api.client.permission.list()
+    // -----------------------------------------------------------------------
+
+    /**
+     * Poll `api.client.permission.list()` for pending permissions across all
+     * sessions. Feed discovered requests through the same normalization,
+     * backfill, and duplicate suppression pipeline used by permission.asked
+     * events. This catches grandchild (and deeper) permission requests whose
+     * `permission.asked` events did not propagate to the root TUI.
+     */
+    async function pollPendingPermissions(): Promise<void> {
+      if (disposed) return
+      if (pollInFlight) return
+      pollInFlight = true
+
+      try {
+        let listed: PermissionRequest[] = []
+        const result = await api.client.permission.list()
+        if (result.error || !result.data) return
+        listed = result.data as PermissionRequest[]
+
+        if (disposed) return
+
+        for (const req of listed) {
+          if (disposed) return
+          // One-at-a-time policy: do not observe/track additional pending
+          // requests while a Supercode dialog is open. Leaving them untouched
+          // lets a later poll surface them after the current request resolves.
+          if (hasCustomDialogOpen()) break
+
+          const normalizedReq: NormalizedPermissionRequest = {
+            id: req.id,
+            sessionID: req.sessionID,
+            permission: req.permission,
+            patterns: req.patterns,
+            metadata: req.metadata,
+            always: req.always,
+            tool: req.tool,
+          }
+
+          // Try synchronous lookup first (common path after lifecycle events)
+          const rootID = resolver.getRootSessionID(req.sessionID)
+
+          if (rootID !== undefined) {
+            processPermissionAsked(normalizedReq)
+          } else {
+            // Parent chain unknown — backfill, then process
+            await resolveWithBackfill(req.sessionID)
+            if (disposed) return
+            if (hasCustomDialogOpen()) break
+            processPermissionAsked(normalizedReq)
+          }
+        }
+      } catch {
+        // API unavailable — silently skip this poll cycle
+      } finally {
+        pollInFlight = false
+        if (!disposed) updateStats()
+      }
+    }
+
+    // -----------------------------------------------------------------------
     // Event subscriptions
     // -----------------------------------------------------------------------
 
@@ -239,11 +353,23 @@ export const SupercodeTuiPlugin: TuiPluginModule = {
     )
 
     // -----------------------------------------------------------------------
+    // Pending permission fallback: start periodic polling
+    // -----------------------------------------------------------------------
+
+    pollTimer = setInterval(() => {
+      pollPendingPermissions()
+    }, pollIntervalMs)
+
+    // -----------------------------------------------------------------------
     // Lifecycle disposal
     // -----------------------------------------------------------------------
 
     api.lifecycle.onDispose(() => {
       disposed = true
+      if (pollTimer !== undefined) {
+        clearInterval(pollTimer)
+        pollTimer = undefined
+      }
       for (const dispose of disposers) dispose()
       bubblingState.dispose()
       resolver.dispose()

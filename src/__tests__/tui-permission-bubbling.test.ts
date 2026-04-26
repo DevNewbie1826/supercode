@@ -11,7 +11,7 @@
  * fabricates a fallback object.
  */
 
-import { describe, it, expect } from "bun:test"
+import { afterEach, describe, it, expect } from "bun:test"
 import type {
   TuiPluginModule,
   TuiPluginApi,
@@ -143,6 +143,15 @@ interface MockSessionInfo {
   parentID?: string
 }
 
+const activeHarnesses = new Set<ReturnType<typeof createMockHarness>>()
+
+afterEach(() => {
+  for (const harness of activeHarnesses) {
+    harness.triggerDispose()
+  }
+  activeHarnesses.clear()
+})
+
 /**
  * Create a mock TuiPluginApi harness with captured registrations.
  *
@@ -155,6 +164,8 @@ function createMockHarness(sessionDB?: Map<string, MockSessionInfo>) {
   const replyCalls: PermissionReplyCall[] = []
   const dialogStack: CapturedDialog[] = []
   const permissionState = new Map<string, PermissionRequest[]>()
+  const kvSetCalls: Array<{ key: string; value: unknown }> = []
+  let permissionListData: PermissionRequest[] = []
 
   const _sessionDB = sessionDB ?? new Map<string, MockSessionInfo>()
 
@@ -246,7 +257,7 @@ function createMockHarness(sessionDB?: Map<string, MockSessionInfo>) {
         })
         return { data: true, error: undefined } as any
       },
-      list: async () => ({ data: [], error: undefined } as any),
+      list: async () => ({ data: permissionListData, error: undefined } as any),
       respond: async () => ({ data: true, error: undefined } as any),
     },
     session: {
@@ -303,7 +314,7 @@ function createMockHarness(sessionDB?: Map<string, MockSessionInfo>) {
       create: () => ({ all: {}, get: () => "", match: () => false, print: () => "" }),
     },
     tuiConfig: {} as any,
-    kv: { get: <V = unknown>(_key: string, fallback?: V) => fallback as V, set: () => {}, ready: true },
+    kv: { get: <V = unknown>(_key: string, fallback?: V) => fallback as V, set: (key: string, value: unknown) => { kvSetCalls.push({ key, value }) }, ready: true },
     state,
     theme: {
       current: {} as any,
@@ -342,7 +353,7 @@ function createMockHarness(sessionDB?: Map<string, MockSessionInfo>) {
     fingerprint: "test",
   }
 
-  return {
+  const harness = {
     capturedHandlers,
     replyCalls,
     dialogStack,
@@ -355,11 +366,20 @@ function createMockHarness(sessionDB?: Map<string, MockSessionInfo>) {
     api,
     meta,
     abortController,
+    kvSetCalls,
+    /** Set the data returned by client.permission.list(). */
+    setPermissionListData: (data: PermissionRequest[]) => {
+      permissionListData = data
+    },
     /** Trigger lifecycle disposal (simulates plugin unload). */
     triggerDispose: () => {
       if (disposeFn) disposeFn()
+      disposeFn = undefined
     },
   }
+
+  activeHarnesses.add(harness)
+  return harness
 }
 
 // ---------------------------------------------------------------------------
@@ -673,6 +693,107 @@ describe("T3 — SupercodeTuiPlugin integration", () => {
 
     permAskedHandler.handler(makePermissionAskedEvent("req-dup-1", "sess-child"))
     expect(h.dialogStack.length).toBe(1)
+  })
+
+  // ── One-at-a-time: distinct events while dialog is open ─────────────────
+
+  it("distinct permission.asked while dialog open does not replace the current dialog", async () => {
+    const h = createMockHarness()
+
+    await SupercodeTuiPlugin.tui!(h.api, undefined, h.meta)
+
+    const sessionCreatedHandler = findHandler(h, "session.created")!
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-root"))
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-child", "sess-root"))
+
+    const permAskedHandler = findHandler(h, "permission.asked")!
+
+    // First request opens a dialog (distinct patterns to identify it)
+    permAskedHandler.handler(makePermissionAskedEvent("req-oat-first", "sess-child", {
+      patterns: ["src/first/**/*.ts"],
+    }))
+    expect(h.dialogStack.length).toBe(1)
+
+    // Verify the open dialog is for the first request (by patterns)
+    let rendered = h.dialogStack[0].render() as { props: { options: any[] } }
+    let desc: string = rendered.props.options[0].description
+    expect(desc).toContain("src/first/**/*.ts")
+
+    // Second distinct request arrives while dialog is open — must NOT replace
+    permAskedHandler.handler(makePermissionAskedEvent("req-oat-second", "sess-child", {
+      patterns: ["src/second/**/*.ts"],
+    }))
+
+    // Still exactly one dialog, still for the first request
+    expect(h.dialogStack.length).toBe(1)
+    rendered = h.dialogStack[0].render() as { props: { options: any[] } }
+    desc = rendered.props.options[0].description
+    expect(desc).toContain("src/first/**/*.ts")
+    expect(desc).not.toContain("src/second/**/*.ts")
+
+    // No auto-approval of either request
+    expect(h.replyCalls.length).toBe(0)
+  })
+
+  it("distinct permission.asked while dialog open does not suppress the second request invisibly", async () => {
+    const h = createMockHarness()
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS }, h.meta)
+
+    const sessionCreatedHandler = findHandler(h, "session.created")!
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-root"))
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-child", "sess-root"))
+
+    const permAskedHandler = findHandler(h, "permission.asked")!
+
+    // First request opens dialog
+    permAskedHandler.handler(makePermissionAskedEvent("req-oat-deferred-1", "sess-child", {
+      patterns: ["src/alpha/**/*.ts"],
+    }))
+    expect(h.dialogStack.length).toBe(1)
+
+    // Second distinct request arrives — deferred, not tracked, not suppressed
+    permAskedHandler.handler(makePermissionAskedEvent("req-oat-deferred-2", "sess-child", {
+      patterns: ["src/beta/**/*.ts"],
+    }))
+
+    // Resolve the first request
+    const rendered = h.dialogStack[0].render() as { props: { options: any[] } }
+    const onceOpt = rendered.props.options.find((o: any) => o.value === "once")
+    expect(onceOpt).toBeDefined()
+    if (onceOpt?.onSelect) await onceOpt.onSelect()
+
+    expect(h.replyCalls).toEqual([{ requestID: "req-oat-deferred-1", reply: "once" }])
+
+    // The second request was NOT tracked/suppressed — a poll should surface it
+    h.setPermissionListData([
+      {
+        id: "req-oat-deferred-2",
+        sessionID: "sess-child",
+        permission: "edit",
+        patterns: ["src/beta/**/*.ts"],
+        metadata: {},
+        always: [],
+      },
+    ])
+
+    await waitForPoll()
+
+    // Second request now opens its own dialog
+    expect(h.dialogStack.length).toBe(1)
+    const rendered2 = h.dialogStack[0].render() as { props: { options: any[] } }
+    const desc2: string = rendered2.props.options[0].description
+    expect(desc2).toContain("src/beta/**/*.ts")
+
+    // Reply to second request with original request ID
+    const rejectOpt = rendered2.props.options.find((o: any) => o.value === "reject")
+    expect(rejectOpt).toBeDefined()
+    if (rejectOpt?.onSelect) await rejectOpt.onSelect()
+
+    expect(h.replyCalls).toEqual([
+      { requestID: "req-oat-deferred-1", reply: "once" },
+      { requestID: "req-oat-deferred-2", reply: "reject" },
+    ])
   })
 
   // ── Dialog cancel/error ─────────────────────────────────────────────────
@@ -1100,5 +1221,571 @@ describe("T3 — lifecycle disposal", () => {
     await new Promise((r) => setTimeout(r, 0))
 
     expect(h.dialogStack.length).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// T4: Pending permission fallback via permission.list polling
+// ---------------------------------------------------------------------------
+
+/** Default poll interval for tests (ms). Short enough for fast tests. */
+const TEST_POLL_INTERVAL_MS = 10
+
+/** Wait helper for poll cycles to fire. */
+function waitForPoll(ms = 80): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+describe("T4 — pending permission fallback via permission.list polling", () => {
+  it("grandchild permission discovered via polling opens exactly one dialog after backfill", async () => {
+    const sessionDB = new Map<string, MockSessionInfo>()
+    sessionDB.set("sess-root", { id: "sess-root" })
+    sessionDB.set("sess-child", { id: "sess-child", parentID: "sess-root" })
+    sessionDB.set("sess-grandchild", { id: "sess-grandchild", parentID: "sess-child" })
+
+    const h = createMockHarness(sessionDB)
+
+    // Configure client.session.get for backfill
+    h.client.session.get = async (params: { sessionID: string }) => {
+      const info = sessionDB.get(params.sessionID)
+      return { data: info ?? { id: params.sessionID }, error: undefined } as any
+    }
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS }, h.meta)
+
+    // Warm session events so the resolver knows the parent chain
+    const sessionCreatedHandler = findHandler(h, "session.created")!
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-root"))
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-child", "sess-root"))
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-grandchild", "sess-child"))
+
+    // NO permission.asked event is fired — the request is only discoverable via polling
+    h.setPermissionListData([
+      {
+        id: "req-gc-poll-1",
+        sessionID: "sess-grandchild",
+        permission: "edit",
+        patterns: ["src/**/*.ts"],
+        metadata: {},
+        always: [],
+        tool: { messageID: "msg-gc", callID: "call-gc" },
+      },
+    ])
+
+    await waitForPoll()
+
+    expect(h.dialogStack.length).toBe(1)
+
+    // Verify reply uses original request ID
+    const rendered = h.dialogStack[0].render() as { props: { options: any[] } }
+    const onceOption = rendered.props.options.find((o: any) => o.value === "once")
+    expect(onceOption).toBeDefined()
+    if (onceOption?.onSelect) await onceOption.onSelect()
+
+    expect(h.replyCalls.length).toBe(1)
+    expect(h.replyCalls[0].requestID).toBe("req-gc-poll-1")
+    expect(h.replyCalls[0].reply).toBe("once")
+  })
+
+  it("grandchild permission via polling gets backfilled when session not yet known", async () => {
+    const sessionDB = new Map<string, MockSessionInfo>()
+    sessionDB.set("sess-root", { id: "sess-root" })
+    sessionDB.set("sess-child", { id: "sess-child", parentID: "sess-root" })
+    sessionDB.set("sess-gc-unknown", { id: "sess-gc-unknown", parentID: "sess-child" })
+
+    const h = createMockHarness(sessionDB)
+
+    h.client.session.get = async (params: { sessionID: string }) => {
+      const info = sessionDB.get(params.sessionID)
+      return { data: info ?? { id: params.sessionID }, error: undefined } as any
+    }
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS }, h.meta)
+
+    // Do NOT warm any session.created events — simulate completely unknown chain
+
+    h.setPermissionListData([
+      {
+        id: "req-gc-backfill",
+        sessionID: "sess-gc-unknown",
+        permission: "edit",
+        patterns: ["src/**/*.ts"],
+        metadata: {},
+        always: [],
+      },
+    ])
+
+    await waitForPoll()
+
+    // Backfill should resolve the chain and open a dialog
+    expect(h.dialogStack.length).toBe(1)
+  })
+
+  it("root session permission from polling does not open dialog", async () => {
+    const h = createMockHarness()
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS }, h.meta)
+
+    const sessionCreatedHandler = findHandler(h, "session.created")!
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-root"))
+
+    h.setPermissionListData([
+      {
+        id: "req-root-poll",
+        sessionID: "sess-root",
+        permission: "edit",
+        patterns: ["src/**/*.ts"],
+        metadata: {},
+        always: [],
+      },
+    ])
+
+    await waitForPoll()
+
+    expect(h.dialogStack.length).toBe(0)
+    expect(h.replyCalls.length).toBe(0)
+  })
+
+  it("unresolved parent chain from polling does not open dialog", async () => {
+    const h = createMockHarness()
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS }, h.meta)
+
+    // No session events warmed, no session DB — parent chain cannot be resolved
+
+    h.setPermissionListData([
+      {
+        id: "req-unresolved-poll",
+        sessionID: "sess-unknown-chain",
+        permission: "edit",
+        patterns: ["src/**/*.ts"],
+        metadata: {},
+        always: [],
+      },
+    ])
+
+    await waitForPoll()
+
+    expect(h.dialogStack.length).toBe(0)
+    expect(h.replyCalls.length).toBe(0)
+  })
+
+  it("polling does not auto-approve any permission", async () => {
+    const sessionDB = new Map<string, MockSessionInfo>()
+    sessionDB.set("sess-root", { id: "sess-root" })
+    sessionDB.set("sess-child", { id: "sess-child", parentID: "sess-root" })
+
+    const h = createMockHarness(sessionDB)
+
+    h.client.session.get = async (params: { sessionID: string }) => {
+      const info = sessionDB.get(params.sessionID)
+      return { data: info ?? { id: params.sessionID }, error: undefined } as any
+    }
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS }, h.meta)
+
+    const sessionCreatedHandler = findHandler(h, "session.created")!
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-root"))
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-child", "sess-root"))
+
+    h.setPermissionListData([
+      {
+        id: "req-no-auto-approve",
+        sessionID: "sess-child",
+        permission: "edit",
+        patterns: ["src/**/*.ts"],
+        metadata: {},
+        always: [],
+      },
+    ])
+
+    await waitForPoll()
+
+    // Dialog should be open, waiting for user action — no auto-approval
+    expect(h.dialogStack.length).toBe(1)
+    expect(h.replyCalls.length).toBe(0)
+  })
+
+  it("disposal stops polling and prevents dialogs from in-flight poll", async () => {
+    const sessionDB = new Map<string, MockSessionInfo>()
+    sessionDB.set("sess-root", { id: "sess-root" })
+    sessionDB.set("sess-child", { id: "sess-child", parentID: "sess-root" })
+
+    const h = createMockHarness(sessionDB)
+
+    h.client.session.get = async (params: { sessionID: string }) => {
+      const info = sessionDB.get(params.sessionID)
+      return { data: info ?? { id: params.sessionID }, error: undefined } as any
+    }
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS }, h.meta)
+
+    const sessionCreatedHandler = findHandler(h, "session.created")!
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-root"))
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-child", "sess-root"))
+
+    // Dispose before setting up poll data
+    h.triggerDispose()
+
+    h.setPermissionListData([
+      {
+        id: "req-post-dispose-poll",
+        sessionID: "sess-child",
+        permission: "edit",
+        patterns: ["src/**/*.ts"],
+        metadata: {},
+        always: [],
+      },
+    ])
+
+    await waitForPoll()
+
+    expect(h.dialogStack.length).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// T4: Duplicate suppression with polling
+// ---------------------------------------------------------------------------
+
+describe("T4 — duplicate suppression with polling", () => {
+  it("same request from event and poll does not open duplicate dialog", async () => {
+    const h = createMockHarness()
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS }, h.meta)
+
+    const sessionCreatedHandler = findHandler(h, "session.created")!
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-root"))
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-child", "sess-root"))
+
+    // Fire permission.asked event → opens first dialog
+    const permAskedHandler = findHandler(h, "permission.asked")!
+    permAskedHandler.handler(makePermissionAskedEvent("req-dup-event-poll", "sess-child"))
+    expect(h.dialogStack.length).toBe(1)
+
+    // Poll returns the same request
+    h.setPermissionListData([
+      {
+        id: "req-dup-event-poll",
+        sessionID: "sess-child",
+        permission: "edit",
+        patterns: ["src/**/*.ts"],
+        metadata: {},
+        always: [],
+      },
+    ])
+
+    await waitForPoll()
+
+    // Still exactly one dialog — no duplicate
+    expect(h.dialogStack.length).toBe(1)
+    expect(h.replyCalls.length).toBe(0)
+  })
+
+  it("same request from consecutive polls does not open duplicate dialog", async () => {
+    const sessionDB = new Map<string, MockSessionInfo>()
+    sessionDB.set("sess-root", { id: "sess-root" })
+    sessionDB.set("sess-child", { id: "sess-child", parentID: "sess-root" })
+
+    const h = createMockHarness(sessionDB)
+
+    h.client.session.get = async (params: { sessionID: string }) => {
+      const info = sessionDB.get(params.sessionID)
+      return { data: info ?? { id: params.sessionID }, error: undefined } as any
+    }
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS }, h.meta)
+
+    const sessionCreatedHandler = findHandler(h, "session.created")!
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-root"))
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-child", "sess-root"))
+
+    // Set list data — first poll will discover it
+    h.setPermissionListData([
+      {
+        id: "req-dup-poll-poll",
+        sessionID: "sess-child",
+        permission: "edit",
+        patterns: ["src/**/*.ts"],
+        metadata: {},
+        always: [],
+      },
+    ])
+
+    await waitForPoll()
+
+    expect(h.dialogStack.length).toBe(1)
+
+    // Second poll with same data — should not open another dialog
+    await waitForPoll()
+
+    expect(h.dialogStack.length).toBe(1)
+  })
+
+  it("completed request from event suppresses polled discovery", async () => {
+    const h = createMockHarness()
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS }, h.meta)
+
+    const sessionCreatedHandler = findHandler(h, "session.created")!
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-root"))
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-child", "sess-root"))
+
+    // Fire permission.asked → dialog opens
+    const permAskedHandler = findHandler(h, "permission.asked")!
+    permAskedHandler.handler(makePermissionAskedEvent("req-completed-poll", "sess-child"))
+    expect(h.dialogStack.length).toBe(1)
+
+    // Reply to complete it
+    const rendered = h.dialogStack[0].render() as { props: { options: any[] } }
+    const onceOption = rendered.props.options.find((o: any) => o.value === "once")
+    if (onceOption?.onSelect) await onceOption.onSelect()
+    expect(h.replyCalls.length).toBe(1)
+
+    // Clear the dialog stack to check for new dialogs
+    h.dialogStack.length = 0
+
+    // Poll returns the same completed request
+    h.setPermissionListData([
+      {
+        id: "req-completed-poll",
+        sessionID: "sess-child",
+        permission: "edit",
+        patterns: ["src/**/*.ts"],
+        metadata: {},
+        always: [],
+      },
+    ])
+
+    await waitForPoll()
+
+    // No new dialog for completed request
+    expect(h.dialogStack.length).toBe(0)
+  })
+
+  it("multiple pending permissions in one poll only opens one dialog and leaves the next for a later poll", async () => {
+    const h = createMockHarness()
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS }, h.meta)
+
+    const sessionCreatedHandler = findHandler(h, "session.created")!
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-root"))
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-child", "sess-root"))
+
+    h.setPermissionListData([
+      {
+        id: "req-multi-poll-1",
+        sessionID: "sess-child",
+        permission: "edit",
+        patterns: ["src/one.ts"],
+        metadata: {},
+        always: [],
+      },
+      {
+        id: "req-multi-poll-2",
+        sessionID: "sess-child",
+        permission: "edit",
+        patterns: ["src/two.ts"],
+        metadata: {},
+        always: [],
+      },
+    ])
+
+    await waitForPoll()
+
+    expect(h.dialogStack.length).toBe(1)
+    let rendered = h.dialogStack[0].render() as { props: { options: any[]; title: string } }
+    expect(rendered.props.title).toContain("sess-child")
+    expect(h.replyCalls.length).toBe(0)
+
+    const firstOnce = rendered.props.options.find((o: any) => o.value === "once")
+    expect(firstOnce).toBeDefined()
+    if (firstOnce?.onSelect) await firstOnce.onSelect()
+
+    expect(h.replyCalls).toEqual([{ requestID: "req-multi-poll-1", reply: "once" }])
+
+    // Remove the completed request from the pending list; the next poll should
+    // now surface the second request instead of having suppressed it invisibly.
+    h.setPermissionListData([
+      {
+        id: "req-multi-poll-2",
+        sessionID: "sess-child",
+        permission: "edit",
+        patterns: ["src/two.ts"],
+        metadata: {},
+        always: [],
+      },
+    ])
+
+    await waitForPoll()
+
+    expect(h.dialogStack.length).toBe(1)
+    rendered = h.dialogStack[0].render() as { props: { options: any[]; title: string } }
+    const secondReject = rendered.props.options.find((o: any) => o.value === "reject")
+    expect(secondReject).toBeDefined()
+    if (secondReject?.onSelect) await secondReject.onSelect()
+
+    expect(h.replyCalls).toEqual([
+      { requestID: "req-multi-poll-1", reply: "once" },
+      { requestID: "req-multi-poll-2", reply: "reject" },
+    ])
+  })
+
+  it("slow permission.list cycles are single-flight and do not overlap", async () => {
+    const h = createMockHarness()
+    let activeListCalls = 0
+    let maxConcurrentListCalls = 0
+    const releaseListCalls: Array<() => void> = []
+
+    h.client.permission.list = async () => {
+      activeListCalls++
+      maxConcurrentListCalls = Math.max(maxConcurrentListCalls, activeListCalls)
+      await new Promise<void>((resolve) => releaseListCalls.push(resolve))
+      activeListCalls--
+      return { data: [], error: undefined } as any
+    }
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS }, h.meta)
+
+    await waitForPoll(60)
+
+    expect(maxConcurrentListCalls).toBe(1)
+    expect(activeListCalls).toBe(1)
+
+    while (releaseListCalls.length > 0) releaseListCalls.shift()!()
+    await new Promise((r) => setTimeout(r, 0))
+  })
+
+  it("disposal clears polling interval so permission.list is not called again", async () => {
+    const h = createMockHarness()
+    let listCalls = 0
+
+    h.client.permission.list = async () => {
+      listCalls++
+      return { data: [], error: undefined } as any
+    }
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS }, h.meta)
+
+    await waitForPoll(30)
+    expect(listCalls).toBeGreaterThan(0)
+
+    h.triggerDispose()
+    const callsAtDispose = listCalls
+
+    await waitForPoll(40)
+
+    expect(listCalls).toBe(callsAtDispose)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// T4: Observability / status instrumentation
+// ---------------------------------------------------------------------------
+
+describe("T4 — observability/status instrumentation", () => {
+  it("getStats returns correct counts from bubbling state", () => {
+    const { createPermissionBubblingState } = require("../hooks/permission-bubbling")
+    const state = createPermissionBubblingState()
+    const getRootID = (sid: string) => {
+      if (sid === "sess-root") return "sess-root"
+      if (sid === "sess-child") return "sess-root"
+      return undefined
+    }
+
+    // Initially all zeros
+    const stats0 = state.getStats()
+    expect(stats0.pending).toBe(0)
+    expect(stats0.dialogOpen).toBe(0)
+    expect(stats0.completed).toBe(0)
+    expect(stats0.dismissed).toBe(0)
+    expect(stats0.totalTracked).toBe(0)
+
+    // Add a pending request
+    state.observeAsked(
+      { id: "req-s1", sessionID: "sess-child", permission: "edit", patterns: [], metadata: {}, always: [] },
+      getRootID,
+    )
+    const stats1 = state.getStats()
+    expect(stats1.pending).toBe(1)
+    expect(stats1.totalTracked).toBe(1)
+
+    // Open dialog
+    state.markDialogOpen("req-s1")
+    const stats2 = state.getStats()
+    expect(stats2.pending).toBe(0)
+    expect(stats2.dialogOpen).toBe(1)
+
+    // Complete
+    state.observeReplied("req-s1")
+    const stats3 = state.getStats()
+    expect(stats3.dialogOpen).toBe(0)
+    expect(stats3.completed).toBe(1)
+  })
+
+  it("plugin stores stats in kv after poll cycle", async () => {
+    const sessionDB = new Map<string, MockSessionInfo>()
+    sessionDB.set("sess-root", { id: "sess-root" })
+    sessionDB.set("sess-child", { id: "sess-child", parentID: "sess-root" })
+
+    const h = createMockHarness(sessionDB)
+
+    h.client.session.get = async (params: { sessionID: string }) => {
+      const info = sessionDB.get(params.sessionID)
+      return { data: info ?? { id: params.sessionID }, error: undefined } as any
+    }
+
+    await SupercodeTuiPlugin.tui!(h.api, { pollIntervalMs: TEST_POLL_INTERVAL_MS }, h.meta)
+
+    const sessionCreatedHandler = findHandler(h, "session.created")!
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-root"))
+    sessionCreatedHandler.handler(makeSessionCreatedEvent("sess-child", "sess-root"))
+
+    h.setPermissionListData([
+      {
+        id: "req-stats-1",
+        sessionID: "sess-child",
+        permission: "edit",
+        patterns: ["src/**/*.ts"],
+        metadata: {},
+        always: [],
+      },
+    ])
+
+    await waitForPoll()
+
+    // kv.set should have been called with stats
+    const statsCall = h.kvSetCalls.find((c) => c.key === "supercode:permission-bubbling:stats")
+    expect(statsCall).toBeDefined()
+    const stats = statsCall!.value as { pending: number; dialogOpen: number; completed: number; dismissed: number; totalTracked: number }
+    expect(typeof stats.pending).toBe("number")
+    expect(typeof stats.dialogOpen).toBe("number")
+    expect(typeof stats.completed).toBe("number")
+    expect(typeof stats.dismissed).toBe("number")
+    expect(typeof stats.totalTracked).toBe("number")
+  })
+
+  it("getStats is callable and returns expected shape after dispose resets", () => {
+    const { createPermissionBubblingState } = require("../hooks/permission-bubbling")
+    const state = createPermissionBubblingState()
+    const getRootID = (sid: string) => {
+      if (sid === "sess-root") return "sess-root"
+      if (sid === "sess-child") return "sess-root"
+      return undefined
+    }
+
+    state.observeAsked(
+      { id: "req-dispose-stats", sessionID: "sess-child", permission: "edit", patterns: [], metadata: {}, always: [] },
+      getRootID,
+    )
+    expect(state.getStats().totalTracked).toBe(1)
+
+    state.dispose()
+    const postDispose = state.getStats()
+    expect(postDispose.totalTracked).toBe(0)
+    expect(postDispose.pending).toBe(0)
+    expect(postDispose.dialogOpen).toBe(0)
+    expect(postDispose.completed).toBe(0)
+    expect(postDispose.dismissed).toBe(0)
   })
 })
