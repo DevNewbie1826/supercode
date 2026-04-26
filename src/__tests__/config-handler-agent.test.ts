@@ -267,3 +267,94 @@ describe("createConfigHandler orchestrator agent registration", () => {
     })
   })
 })
+
+describe("createConfigHandler default_agent for orchestrator", () => {
+  it("sets default_agent to orchestrator when config is empty", async () => {
+    const config: Record<string, unknown> = {}
+
+    await createConfigHandler("/test/directory")(config)
+
+    expect(config.default_agent).toBe("orchestrator")
+    expect((config.agent as Record<string, unknown>).orchestrator).toMatchObject({
+      mode: "primary",
+    })
+  })
+
+  it("preserves an existing non-empty string default_agent", async () => {
+    const config: Record<string, unknown> = { default_agent: "custom-primary" }
+
+    await createConfigHandler("/test/directory")(config)
+
+    expect(config.default_agent).toBe("custom-primary")
+  })
+
+  it("replaces a blank string default_agent with orchestrator", async () => {
+    const config: Record<string, unknown> = { default_agent: "" }
+
+    await createConfigHandler("/test/directory")(config)
+
+    expect(config.default_agent).toBe("orchestrator")
+  })
+
+  it("replaces a whitespace-only string default_agent with orchestrator", async () => {
+    const config: Record<string, unknown> = { default_agent: "   " }
+
+    await createConfigHandler("/test/directory")(config)
+
+    expect(config.default_agent).toBe("orchestrator")
+  })
+
+  it("replaces a non-string default_agent with orchestrator", async () => {
+    const config: Record<string, unknown> = { default_agent: false }
+
+    await createConfigHandler("/test/directory")(config)
+
+    expect(config.default_agent).toBe("orchestrator")
+  })
+
+  it("does not set default_agent when orchestrator is disabled and config is empty", async () => {
+    const config: Record<string, unknown> = {}
+
+    await createConfigHandler(
+      "/test/directory",
+      undefined,
+      {
+        preloadedConfig: {
+          agent: {
+            orchestrator: {
+              enabled: false,
+            },
+          },
+        },
+      },
+    )(config)
+
+    expect((config.agent as Record<string, unknown>).orchestrator).toMatchObject({
+      disable: true,
+    })
+    expect(config.default_agent).toBeUndefined()
+  })
+
+  it("preserves existing non-empty default_agent when orchestrator is disabled", async () => {
+    const config: Record<string, unknown> = { default_agent: "custom-primary" }
+
+    await createConfigHandler(
+      "/test/directory",
+      undefined,
+      {
+        preloadedConfig: {
+          agent: {
+            orchestrator: {
+              enabled: false,
+            },
+          },
+        },
+      },
+    )(config)
+
+    expect((config.agent as Record<string, unknown>).orchestrator).toMatchObject({
+      disable: true,
+    })
+    expect(config.default_agent).toBe("custom-primary")
+  })
+})

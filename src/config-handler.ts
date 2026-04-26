@@ -51,6 +51,18 @@ export function createConfigHandler(
       mergedAgent[name] = buildBuiltinAgentDisableEntry(mergedAgent[name], disable)
     }
 
+    const orchestratorEntry = mergedAgent.orchestrator
+    if (
+      isRecord(orchestratorEntry) &&
+      orchestratorEntry.mode === "primary" &&
+      orchestratorEntry.disable !== true
+    ) {
+      const currentDefault = config.default_agent
+      if (typeof currentDefault !== "string" || currentDefault.trim() === "") {
+        config.default_agent = "orchestrator"
+      }
+    }
+
     config.mcp = mergedMcp
     config.agent = mergedAgent
     registerSkillPath(config, skillPath)
