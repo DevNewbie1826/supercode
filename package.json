@@ -6,6 +6,9 @@
   "exports": {
     ".": {
       "import": "./src/index.ts"
+    },
+    "./tui": {
+      "import": "./src/tui.ts"
     }
   },
   "repository": {

@@ -694,4 +694,214 @@ describe("SessionRoleResolver", () => {
       expect(resolver.extractSessionID(true)).toBeUndefined()
     })
   })
+
+  // ── Root session lookup (T1: getRootSessionID) ────────────────────────
+  //
+  // Tests for parent-chain root resolution:
+  //   - Root session (no parentID) returns itself
+  //   - Child session resolves to its root parent
+  //   - Grandchild session resolves to root grandparent
+  //   - Unknown/unobserved parent returns undefined (safe fallback)
+  //   - Deleted session returns undefined
+  //   - TTL-expired session facts return undefined
+  //   - Cyclic parent chains return undefined (bounded traversal)
+
+  describe("getRootSessionID — root lookup", () => {
+    // Fixture helpers (local to this describe block for clarity)
+    function sessionCreated(sessionID: string, overrides?: { parentID?: string }) {
+      return {
+        type: "session.created" as const,
+        properties: {
+          info: {
+            id: sessionID,
+            projectID: "proj-test",
+            directory: "/test",
+            title: "Test session",
+            version: "1",
+            parentID: overrides?.parentID,
+            time: { created: 1000, updated: 1000 },
+          },
+        },
+      }
+    }
+
+    function sessionDeleted(sessionID: string) {
+      return {
+        type: "session.deleted" as const,
+        properties: {
+          info: {
+            id: sessionID,
+            projectID: "proj-test",
+            directory: "/test",
+            title: "Test session",
+            version: "1",
+            time: { created: 1000, updated: 1000 },
+          },
+        },
+      }
+    }
+
+    it("root session (no parentID) returns itself", () => {
+      const resolver = createSessionRoleResolver()
+      resolver.observe(sessionCreated("root-1"))
+      expect(resolver.getRootSessionID("root-1")).toBe("root-1")
+    })
+
+    it("child session resolves to its root parent", () => {
+      const resolver = createSessionRoleResolver()
+      resolver.observe(sessionCreated("root-2"))
+      resolver.observe(sessionCreated("child-2", { parentID: "root-2" }))
+      expect(resolver.getRootSessionID("child-2")).toBe("root-2")
+    })
+
+    it("grandchild session resolves to root grandparent", () => {
+      const resolver = createSessionRoleResolver()
+      resolver.observe(sessionCreated("root-3"))
+      resolver.observe(sessionCreated("child-3", { parentID: "root-3" }))
+      resolver.observe(sessionCreated("grandchild-3", { parentID: "child-3" }))
+      expect(resolver.getRootSessionID("grandchild-3")).toBe("root-3")
+    })
+
+    it("child with unobserved parent returns undefined", () => {
+      const resolver = createSessionRoleResolver()
+      // child-4 has parentID "unknown-parent", but we never observed "unknown-parent"
+      resolver.observe(sessionCreated("child-4", { parentID: "unknown-parent" }))
+      expect(resolver.getRootSessionID("child-4")).toBeUndefined()
+    })
+
+    it("unobserved session returns undefined", () => {
+      const resolver = createSessionRoleResolver()
+      expect(resolver.getRootSessionID("never-observed")).toBeUndefined()
+    })
+
+    it("deleted session no longer resolves as root", () => {
+      const resolver = createSessionRoleResolver()
+      resolver.observe(sessionCreated("root-deleted"))
+      expect(resolver.getRootSessionID("root-deleted")).toBe("root-deleted")
+
+      resolver.observe(sessionDeleted("root-deleted"))
+      expect(resolver.getRootSessionID("root-deleted")).toBeUndefined()
+    })
+
+    it("deleted ancestor no longer resolves child to root", () => {
+      const resolver = createSessionRoleResolver()
+      resolver.observe(sessionCreated("root-del-anc"))
+      resolver.observe(sessionCreated("child-del-anc", { parentID: "root-del-anc" }))
+
+      expect(resolver.getRootSessionID("child-del-anc")).toBe("root-del-anc")
+
+      // Delete the root — child chain is broken
+      resolver.observe(sessionDeleted("root-del-anc"))
+      expect(resolver.getRootSessionID("child-del-anc")).toBeUndefined()
+    })
+
+    it("TTL-expired session facts return undefined for root lookup", () => {
+      let currentTime = 0
+      const ttlMs = 5000
+      const resolver = createSessionRoleResolver({ ttlMs, now: () => currentTime })
+
+      currentTime = 0
+      resolver.observe(sessionCreated("root-ttl"))
+      resolver.observe(sessionCreated("child-ttl", { parentID: "root-ttl" }))
+      expect(resolver.getRootSessionID("child-ttl")).toBe("root-ttl")
+
+      // Advance past TTL
+      currentTime = 6000
+      // Observe something to trigger pruning
+      resolver.observe(sessionCreated("other", { parentID: "x" }))
+
+      expect(resolver.getRootSessionID("root-ttl")).toBeUndefined()
+      expect(resolver.getRootSessionID("child-ttl")).toBeUndefined()
+    })
+
+    it("TTL-expired root returns undefined even without pruning trigger", () => {
+      let currentTime = 0
+      const ttlMs = 5000
+      const resolver = createSessionRoleResolver({ ttlMs, now: () => currentTime })
+
+      currentTime = 0
+      resolver.observe(sessionCreated("root-ttl-direct"))
+      expect(resolver.getRootSessionID("root-ttl-direct")).toBe("root-ttl-direct")
+
+      currentTime = 6000
+      expect(resolver.getRootSessionID("root-ttl-direct")).toBeUndefined()
+    })
+
+    it("cyclic parent chain returns undefined without infinite loop", () => {
+      const resolver = createSessionRoleResolver()
+      // A → B → A (cycle)
+      resolver.observe(sessionCreated("cycle-a", { parentID: "cycle-b" }))
+      resolver.observe(sessionCreated("cycle-b", { parentID: "cycle-a" }))
+      expect(resolver.getRootSessionID("cycle-a")).toBeUndefined()
+      expect(resolver.getRootSessionID("cycle-b")).toBeUndefined()
+    })
+
+    it("three-node cycle returns undefined without infinite loop", () => {
+      const resolver = createSessionRoleResolver()
+      // A → B → C → A
+      resolver.observe(sessionCreated("cycle-3a", { parentID: "cycle-3c" }))
+      resolver.observe(sessionCreated("cycle-3b", { parentID: "cycle-3a" }))
+      resolver.observe(sessionCreated("cycle-3c", { parentID: "cycle-3b" }))
+      expect(resolver.getRootSessionID("cycle-3a")).toBeUndefined()
+    })
+
+    it("session.updated also stores parentID for root lookup", () => {
+      const resolver = createSessionRoleResolver()
+      const sessionUpdated = (sessionID: string, overrides?: { parentID?: string }) => ({
+        type: "session.updated" as const,
+        properties: {
+          info: {
+            id: sessionID,
+            projectID: "proj-test",
+            directory: "/test",
+            title: "Test session",
+            version: "1",
+            parentID: overrides?.parentID,
+            time: { created: 1000, updated: 1000 },
+          },
+        },
+      })
+
+      resolver.observe(sessionUpdated("root-upd"))
+      resolver.observe(sessionUpdated("child-upd", { parentID: "root-upd" }))
+      expect(resolver.getRootSessionID("child-upd")).toBe("root-upd")
+    })
+
+    it("root lookup preserves existing role classification behavior", () => {
+      const resolver = createSessionRoleResolver()
+      // Root session observed + primary assistant message → orchestrator
+      resolver.observe(sessionCreated("root-role"))
+      resolver.observe({
+        type: "message.updated" as const,
+        properties: {
+          info: {
+            id: "msg-root-role",
+            sessionID: "root-role",
+            role: "assistant" as const,
+            parentID: "",
+            modelID: "model-test",
+            providerID: "provider-test",
+            mode: "primary",
+            path: { cwd: "/test", root: "/test" },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 1000 },
+          },
+        },
+      })
+
+      // Root lookup still works
+      expect(resolver.getRootSessionID("root-role")).toBe("root-role")
+      // Role classification is unchanged
+      expect(resolver.getRole("root-role")).toBe("orchestrator")
+    })
+
+    it("child with parent chain where mid-ancestor is missing returns undefined", () => {
+      const resolver = createSessionRoleResolver()
+      // grandchild → child (observed) → root (NOT observed, so parent chain broken)
+      resolver.observe(sessionCreated("child-mid", { parentID: "root-mid-missing" }))
+      resolver.observe(sessionCreated("grandchild-mid", { parentID: "child-mid" }))
+      expect(resolver.getRootSessionID("grandchild-mid")).toBeUndefined()
+    })
+  })
 })

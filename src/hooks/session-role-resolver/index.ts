@@ -5,6 +5,7 @@ export type { SessionRole } from "./types"
 export interface SessionRoleResolver {
   observe(event: unknown): void
   getRole(sessionID: string): SessionRole
+  getRootSessionID(sessionID: string): string | undefined
   extractSessionID(event: unknown): string | undefined
   dispose(): void
 }
@@ -98,8 +99,8 @@ export function createSessionRoleResolver(
   // Resolved role state keyed by sessionID
   const roles = new Map<string, { role: SessionRole; observedAt: number }>()
 
-  // Session lifecycle facts: whether a session is a child (has parentID)
-  const sessionFacts = new Map<string, { isChild: boolean; observedAt: number }>()
+  // Session lifecycle facts: whether a session is a child (has parentID) and its parentID
+  const sessionFacts = new Map<string, { isChild: boolean; parentID?: string; observedAt: number }>()
 
   function pruneExpired(): void {
     const cutoff = now() - ttlMs
@@ -136,7 +137,7 @@ export function createSessionRoleResolver(
       const parentID = i.parentID
       const isChild = typeof parentID === "string" && parentID !== ""
 
-      sessionFacts.set(sessionID, { isChild, observedAt: now() })
+      sessionFacts.set(sessionID, { isChild, parentID: isChild ? parentID : undefined, observedAt: now() })
 
       // Child sessions are immediately classified as executor
       if (isChild) {
@@ -190,10 +191,52 @@ export function createSessionRoleResolver(
     return entry.role
   }
 
+  /**
+   * Resolve the root ancestor session ID for a known session.
+   *
+   * Follows the parentID chain stored in sessionFacts. Returns undefined
+   * if the session has never been observed, if its facts have been
+   * TTL-expired or deleted, if any ancestor in the chain is missing,
+   * or if a cycle is detected.
+   */
+  function getRootSessionID(sessionID: string): string | undefined {
+    const facts = sessionFacts.get(sessionID)
+    if (!facts) return undefined
+    // Enforce TTL on the starting entry
+    if (facts.observedAt < now() - ttlMs) {
+      sessionFacts.delete(sessionID)
+      return undefined
+    }
+    // If this is a root session (no parent), return itself
+    if (!facts.isChild) return sessionID
+
+    // Walk up the parent chain with cycle detection
+    const visited = new Set<string>([sessionID])
+    let current = facts.parentID
+    const maxDepth = 100 // Bounded loop guard
+    let depth = 0
+    while (current) {
+      if (visited.has(current)) return undefined // cycle detected
+      if (++depth > maxDepth) return undefined // safety bound
+
+      visited.add(current)
+      const ancestorFacts = sessionFacts.get(current)
+      if (!ancestorFacts) return undefined // unknown ancestor
+      // Enforce TTL on ancestor
+      if (ancestorFacts.observedAt < now() - ttlMs) {
+        sessionFacts.delete(current)
+        return undefined
+      }
+      if (!ancestorFacts.isChild) return current // found root
+      current = ancestorFacts.parentID
+    }
+    return undefined // should not reach here, but safe fallback
+  }
+
   function dispose(): void {
     roles.clear()
     sessionFacts.clear()
   }
 
-  return { observe, getRole, extractSessionID, dispose }
+  return { observe, getRole, getRootSessionID, extractSessionID, dispose }
 }
