@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import type { SessionRole } from "../hooks/session-role-resolver"
 import { createSessionRoleResolver } from "../hooks/session-role-resolver"
+import { CONTINUATION_PROMPT } from "../hooks/todo-continuation-enforcer/constants"
 import { createTodoContinuationEnforcer } from "../hooks/todo-continuation-enforcer"
 
 /**
@@ -1744,5 +1745,492 @@ describe("TodoContinuationEnforcer — real resolver integration", () => {
     // Unknown sessions now prompt (EasyCode parity)
     expect(prompts).toHaveLength(1)
     expect(prompts[0]!.sessionID).toBe("sess-cont-unknown")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 22. Dynamic continuation prompt — remaining-task section content
+// ---------------------------------------------------------------------------
+
+describe("TodoContinuationEnforcer — dynamic remaining-task prompt content", () => {
+  it("appends Remaining tasks section listing only pending and in_progress items in order", async () => {
+    const todos = [
+      { content: "Task A", status: "completed" },
+      { content: "Task B", status: "pending" },
+      { content: "Task C", status: "cancelled" },
+      { content: "Task D", status: "in_progress" },
+    ]
+    const { ctx, prompts } = makeCtx(todos)
+    const fake = createFakeTimers()
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 0,
+      getRole: () => "orchestrator" as SessionRole,
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "ses-dynamic-mixed" },
+    })
+    await fake.firePending()
+
+    expect(prompts).toHaveLength(1)
+
+    const expectedText =
+      CONTINUATION_PROMPT +
+      "\n\nRemaining tasks:\n" +
+      "- [pending] Task B\n" +
+      "- [in_progress] Task D"
+
+    expect(prompts[0]!.text).toBe(expectedText)
+  })
+
+  it("appends single remaining task for one pending item", async () => {
+    const { ctx, prompts } = makeCtx([
+      { content: "Write tests", status: "pending" },
+    ])
+    const fake = createFakeTimers()
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 0,
+      getRole: () => "executor" as SessionRole,
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "ses-dynamic-single" },
+    })
+    await fake.firePending()
+
+    expect(prompts).toHaveLength(1)
+
+    const expectedText =
+      CONTINUATION_PROMPT +
+      "\n\nRemaining tasks:\n" +
+      "- [pending] Write tests"
+
+    expect(prompts[0]!.text).toBe(expectedText)
+  })
+
+  it("appends all incomplete items when all todos are incomplete", async () => {
+    const { ctx, prompts } = makeCtx([
+      { content: "Task 1", status: "pending" },
+      { content: "Task 2", status: "in_progress" },
+      { content: "Task 3", status: "pending" },
+    ])
+    const fake = createFakeTimers()
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 0,
+      getRole: () => "orchestrator" as SessionRole,
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "ses-dynamic-all-inc" },
+    })
+    await fake.firePending()
+
+    expect(prompts).toHaveLength(1)
+
+    const expectedText =
+      CONTINUATION_PROMPT +
+      "\n\nRemaining tasks:\n" +
+      "- [pending] Task 1\n" +
+      "- [in_progress] Task 2\n" +
+      "- [pending] Task 3"
+
+    expect(prompts[0]!.text).toBe(expectedText)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 23. Execution-time freshness — remaining tasks reflect mutated TODO state
+// ---------------------------------------------------------------------------
+
+describe("TodoContinuationEnforcer — execution-time freshness of remaining tasks", () => {
+  it("prompt reflects execution-time mutated state, not schedule-time state", async () => {
+    const todos = [
+      { content: "Task X", status: "pending" },
+      { content: "Task Y", status: "in_progress" },
+    ]
+    const { ctx, prompts } = makeCtx(todos)
+    const fake = createFakeTimers()
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 5,
+      getRole: () => "orchestrator" as SessionRole,
+      timer: fake,
+    })
+
+    // Schedule with original incomplete state
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "ses-freshness" },
+    })
+    expect(fake.pendingCount()).toBe(1)
+
+    // Mutate backing todos BEFORE timer fires:
+    // Task X gets completed, Task Y content changes, Task Z is added as pending
+    todos[0]!.status = "completed"
+    todos[1]!.content = "Task Y (updated)"
+    todos[1]!.status = "pending"
+    todos.push({ content: "Task Z", status: "in_progress" })
+
+    // Fire the timer — prompt must reflect the execution-time state
+    await fake.firePending()
+
+    expect(prompts).toHaveLength(1)
+
+    const expectedText =
+      CONTINUATION_PROMPT +
+      "\n\nRemaining tasks:\n" +
+      "- [pending] Task Y (updated)\n" +
+      "- [in_progress] Task Z"
+
+    expect(prompts[0]!.text).toBe(expectedText)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 24. Malformed / unexpected TODO values — graceful coercion
+// ---------------------------------------------------------------------------
+
+describe("TodoContinuationEnforcer — malformed/unexpected TODO values", () => {
+  it("handles missing status gracefully and sends prompt with coerced bullet text", async () => {
+    const todos: Array<Record<string, unknown>> = [
+      { content: "Task without status" },
+    ]
+    const prompts: Array<{ sessionID: string; text: string }> = []
+    const ctx = {
+      client: {
+        session: {
+          todo: () => Promise.resolve(todos),
+          prompt: (payload: { sessionID: string; text: string }) => {
+            prompts.push(payload)
+            return Promise.resolve()
+          },
+        },
+      },
+    }
+    const fake = createFakeTimers()
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 0,
+      getRole: () => "orchestrator" as SessionRole,
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "ses-malformed-status" },
+    })
+    await fake.firePending()
+
+    // Item with missing status is incomplete (not "completed" or "cancelled")
+    expect(prompts).toHaveLength(1)
+
+    const expectedText =
+      CONTINUATION_PROMPT +
+      "\n\nRemaining tasks:\n" +
+      "- [undefined] Task without status"
+
+    expect(prompts[0]!.text).toBe(expectedText)
+  })
+
+  it("handles missing content gracefully and sends prompt with coerced bullet text", async () => {
+    const todos: Array<Record<string, unknown>> = [
+      { status: "pending" },
+    ]
+    const prompts: Array<{ sessionID: string; text: string }> = []
+    const ctx = {
+      client: {
+        session: {
+          todo: () => Promise.resolve(todos),
+          prompt: (payload: { sessionID: string; text: string }) => {
+            prompts.push(payload)
+            return Promise.resolve()
+          },
+        },
+      },
+    }
+    const fake = createFakeTimers()
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 0,
+      getRole: () => "orchestrator" as SessionRole,
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "ses-malformed-content" },
+    })
+    await fake.firePending()
+
+    // Item with missing content is still incomplete
+    expect(prompts).toHaveLength(1)
+
+    const expectedText =
+      CONTINUATION_PROMPT +
+      "\n\nRemaining tasks:\n" +
+      "- [pending] undefined"
+
+    expect(prompts[0]!.text).toBe(expectedText)
+  })
+
+  it("handles non-string status and content without crashing", async () => {
+    const todos: Array<Record<string, unknown>> = [
+      { content: 123, status: null },
+    ]
+    const prompts: Array<{ sessionID: string; text: string }> = []
+    const ctx = {
+      client: {
+        session: {
+          todo: () => Promise.resolve(todos),
+          prompt: (payload: { sessionID: string; text: string }) => {
+            prompts.push(payload)
+            return Promise.resolve()
+          },
+        },
+      },
+    }
+    const fake = createFakeTimers()
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 0,
+      getRole: () => "orchestrator" as SessionRole,
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "ses-malformed-nonstring" },
+    })
+    await fake.firePending()
+
+    // null status is not "completed" or "cancelled", so item is incomplete
+    expect(prompts).toHaveLength(1)
+
+    // Coerced bullet text uses String() equivalents
+    const expectedText =
+      CONTINUATION_PROMPT +
+      "\n\nRemaining tasks:\n" +
+      "- [null] 123"
+
+    expect(prompts[0]!.text).toBe(expectedText)
+  })
+
+  it("handles Symbol status and content without crashing (template interpolation would throw)", async () => {
+    const symStatus = Symbol("pending")
+    const symContent = Symbol("task-name")
+    const todos: Array<Record<string, unknown>> = [
+      { content: symContent, status: symStatus },
+    ]
+    const prompts: Array<{ sessionID: string; text: string }> = []
+    const ctx = {
+      client: {
+        session: {
+          todo: () => Promise.resolve(todos),
+          prompt: (payload: { sessionID: string; text: string }) => {
+            prompts.push(payload)
+            return Promise.resolve()
+          },
+        },
+      },
+    }
+    const fake = createFakeTimers()
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 0,
+      getRole: () => "orchestrator" as SessionRole,
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "ses-malformed-symbol" },
+    })
+    await fake.firePending()
+
+    // Symbol status is not "completed" or "cancelled", so item is incomplete.
+    // Must NOT crash or be swallowed by the catch block.
+    expect(prompts).toHaveLength(1)
+
+    const expectedText =
+      CONTINUATION_PROMPT +
+      "\n\nRemaining tasks:\n" +
+      `- [Symbol(pending)] Symbol(task-name)`
+
+    expect(prompts[0]!.text).toBe(expectedText)
+  })
+
+  it("handles hostile objects with throwing coercion without crashing", async () => {
+    // Object whose toString / valueOf / [Symbol.toPrimitive] throws
+    const hostile = {
+      get [Symbol.toPrimitive]() {
+        throw new Error("hostile coercion")
+      },
+      toString() {
+        throw new Error("hostile toString")
+      },
+      valueOf() {
+        throw new Error("hostile valueOf")
+      },
+    }
+    const todos: Array<Record<string, unknown>> = [
+      { content: hostile, status: hostile },
+    ]
+    const prompts: Array<{ sessionID: string; text: string }> = []
+    const ctx = {
+      client: {
+        session: {
+          todo: () => Promise.resolve(todos),
+          prompt: (payload: { sessionID: string; text: string }) => {
+            prompts.push(payload)
+            return Promise.resolve()
+          },
+        },
+      },
+    }
+    const fake = createFakeTimers()
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 0,
+      getRole: () => "orchestrator" as SessionRole,
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "ses-hostile-coerce" },
+    })
+    await fake.firePending()
+
+    // Hostile object status is not "completed" or "cancelled", so item is incomplete.
+    // Must NOT crash; prompt is still sent with fallback text.
+    expect(prompts).toHaveLength(1)
+
+    const expectedText =
+      CONTINUATION_PROMPT +
+      "\n\nRemaining tasks:\n" +
+      "- [[unrepresentable]] [unrepresentable]"
+
+    expect(prompts[0]!.text).toBe(expectedText)
+  })
+
+  it("mixed malformed and well-formed items lists only incomplete ones with deterministic coercion", async () => {
+    const todos: Array<Record<string, unknown>> = [
+      { content: "Done task", status: "completed" },
+      { content: undefined, status: "pending" },
+      { content: "Cancelled task", status: "cancelled" },
+      { content: "Normal task", status: "in_progress" },
+    ]
+    const prompts: Array<{ sessionID: string; text: string }> = []
+    const ctx = {
+      client: {
+        session: {
+          todo: () => Promise.resolve(todos),
+          prompt: (payload: { sessionID: string; text: string }) => {
+            prompts.push(payload)
+            return Promise.resolve()
+          },
+        },
+      },
+    }
+    const fake = createFakeTimers()
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 0,
+      getRole: () => "orchestrator" as SessionRole,
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "ses-malformed-mixed" },
+    })
+    await fake.firePending()
+
+    expect(prompts).toHaveLength(1)
+
+    const expectedText =
+      CONTINUATION_PROMPT +
+      "\n\nRemaining tasks:\n" +
+      "- [pending] undefined\n" +
+      "- [in_progress] Normal task"
+
+    expect(prompts[0]!.text).toBe(expectedText)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 25. No-prompt terminal behavior — dynamic prompt confirms no prompt sent
+// ---------------------------------------------------------------------------
+
+describe("TodoContinuationEnforcer — no-prompt when all todos terminal", () => {
+  it("sends no prompt when all todos are completed at execution time (dynamic section would be empty)", async () => {
+    const { ctx, prompts } = makeCtx([
+      { content: "Done A", status: "completed" },
+      { content: "Done B", status: "completed" },
+    ])
+    const fake = createFakeTimers()
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 0,
+      getRole: () => "orchestrator" as SessionRole,
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "ses-all-completed-dynamic" },
+    })
+    await fake.firePending()
+
+    expect(prompts).toHaveLength(0)
+  })
+
+  it("sends no prompt when all todos are a mix of completed and cancelled at execution time", async () => {
+    const { ctx, prompts } = makeCtx([
+      { content: "Done A", status: "completed" },
+      { content: "Cancelled B", status: "cancelled" },
+      { content: "Done C", status: "completed" },
+    ])
+    const fake = createFakeTimers()
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 0,
+      getRole: () => "orchestrator" as SessionRole,
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "ses-mix-terminal-dynamic" },
+    })
+    await fake.firePending()
+
+    expect(prompts).toHaveLength(0)
+  })
+
+  it("sends no prompt when todos transition from incomplete to all-completed before timer fires", async () => {
+    const todos = [
+      { content: "Task 1", status: "pending" },
+      { content: "Task 2", status: "in_progress" },
+    ]
+    const { ctx, prompts } = makeCtx(todos)
+    const fake = createFakeTimers()
+
+    const enforcer = createTodoContinuationEnforcer(ctx, {
+      countdownSeconds: 10,
+      getRole: () => "orchestrator" as SessionRole,
+      timer: fake,
+    })
+
+    await enforcer.handler({
+      event: { type: "session.idle", sessionID: "ses-terminal-transition" },
+    })
+    expect(fake.pendingCount()).toBe(1)
+
+    // Complete all todos before timer fires
+    todos[0]!.status = "completed"
+    todos[1]!.status = "completed"
+
+    await fake.firePending()
+
+    // No prompt because no incomplete todos remain at execution time
+    expect(prompts).toHaveLength(0)
   })
 })

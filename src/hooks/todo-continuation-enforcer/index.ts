@@ -1,7 +1,38 @@
-import { normalizeTodos, hasIncompleteTodo } from "../todo-state"
+import { normalizeTodos } from "../todo-state"
+import type { TodoItem } from "../todo-state"
 import { DEFAULT_COUNTDOWN_SECONDS, CONTINUATION_PROMPT } from "./constants"
 import { extractSessionID, isSessionStatusIdle, extractIdleInfoId, extractIdlePropertiesSnakeSessionId } from "./session-status-normalizer"
 import type { EnforcerCtx, EnforcerOptions, EnforcerEvent, TodoContinuationEnforcer, TimerSeam } from "./types"
+
+/**
+ * Deterministic, non-throwing string coercion for prompt bullet text.
+ *
+ * Template literals (`${value}`) throw TypeError for Symbol values.
+ * `String()` converts Symbol safely but can still throw for hostile objects
+ * with throwing `[Symbol.toPrimitive]` / `toString()` / `valueOf()`.
+ * This wrapper catches any coercion failure and returns a stable fallback.
+ */
+function safeCoerce(value: unknown): string {
+  if (typeof value === "string") return value
+  try {
+    return String(value)
+  } catch {
+    return "[unrepresentable]"
+  }
+}
+
+/**
+ * Build the continuation prompt text with appended remaining-task bullets.
+ *
+ * @param incompleteTodos - Pre-filtered array of incomplete TODO items.
+ *   Must be derived with the same semantics as the prompt-decision filter.
+ */
+function buildContinuationPrompt(incompleteTodos: TodoItem[]): string {
+  const bulletLines = incompleteTodos
+    .map((t) => `- [${safeCoerce(t.status)}] ${safeCoerce(t.content)}`)
+    .join("\n")
+  return CONTINUATION_PROMPT + "\n\nRemaining tasks:\n" + bulletLines
+}
 
 /**
  * Create a continuation enforcer that re-prompts idle sessions
@@ -64,10 +95,17 @@ export function createTodoContinuationEnforcer(
       }
       const todos = normalizeTodos(raw)
 
-      if (hasIncompleteTodo(todos)) {
+      // Derive incomplete todos once with current semantics
+      const incompleteTodos = todos.filter(
+        (t: TodoItem) => t.status !== "completed" && t.status !== "cancelled",
+      )
+
+      if (incompleteTodos.length > 0) {
+        const text = buildContinuationPrompt(incompleteTodos)
+
         await ctx.client.session.prompt({
           sessionID,
-          text: CONTINUATION_PROMPT,
+          text,
         })
       }
     } catch {
