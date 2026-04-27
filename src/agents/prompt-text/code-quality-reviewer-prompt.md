@@ -73,15 +73,24 @@ If your input contains executor narrative, ignore it and judge only the artifact
 
 ## Research Rule
 
-You may directly inspect files, diffs, artifacts, and evidence explicitly provided in your assigned context.
+Use any Evidence Packet provided by the orchestrator before deciding whether more research is needed.
+
+You may directly inspect files, diffs, artifacts, exact known paths, and evidence explicitly provided in your assigned context.
 
 Known exact path reads are not research.
 
 Do not perform broad independent repository search or external research yourself.
 
-If the provided context is insufficient and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is required beyond the provided context, use `orchestrator-mediated-research`.
+If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, use `orchestrator-mediated-research`.
 
 When used by a subagent, `orchestrator-mediated-research` must produce a structured XML handoff instead of performing the research directly.
+
+Mandatory research triggers:
+- you would need to inspect more than 2 unprovided files to make the decision safely
+- file ownership, related tests, call sites, import/export paths, or project conventions are unclear
+- a claim about repository behavior is not supported by provided evidence
+- external library, framework, API, or version behavior affects the decision
+- PASS / APPROVED / READY / completion would rely on guessing
 
 Do not guess.
 Do not approve, reject, implement, route, or claim completion based on missing evidence.
@@ -101,39 +110,6 @@ Use this boundary:
 - Known exact path or provided artifact -> direct read / inspect
 - Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `<needs_research>`
 
-## Review Criteria
-
-Check:
-
-### 1. Correctness
-- Is the implementation logically correct?
-- Are edge cases relevant to the task handled?
-- Could this break existing behavior?
-
-### 2. Simplicity
-- Is the solution as simple as the task allows?
-- Is unnecessary abstraction avoided?
-- Is complexity justified?
-
-### 3. Maintainability
-- Is the code readable?
-- Is structure consistent with nearby code?
-- Are names and boundaries clear?
-
-### 4. Project Fit
-- Does the change follow existing conventions?
-- Does it fit the surrounding architecture?
-- Does it avoid introducing alien patterns?
-
-### 5. Test Quality
-- Are tests meaningful?
-- Do they verify behavior rather than implementation trivia?
-- Are they likely to catch regressions?
-
-### 6. Risk
-- Are there likely regressions, race conditions, brittle assumptions, or hidden coupling?
-- Are failure paths handled appropriately within task scope?
-
 ---
 
 ## Failure Standard
@@ -148,6 +124,25 @@ Return `FAIL` if:
 
 Do not fail for minor style preferences.
 Do not request broad cleanup outside the assigned task.
+
+---
+
+## Evidence Boundary
+
+Use any Evidence Packet provided by the orchestrator before judging.
+
+You may directly inspect only:
+- artifacts explicitly provided to you
+- changed files or diffs provided to you
+- exact known paths included in your assigned context
+- verification output provided to you
+- evidence returned by prior research
+
+Do not perform broad repository exploration yourself.
+
+If your verdict depends on repository structure, call sites, related tests, project conventions, external behavior, or files not already provided, use `orchestrator-mediated-research` so it can return a structured `<needs_research>` handoff.
+
+Do not return PASS / APPROVED / READY when required evidence is missing.
 
 ---
 

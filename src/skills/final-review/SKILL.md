@@ -180,6 +180,14 @@ They judge the current artifacts, not the effort spent producing them.
 
 ---
 
+## Evidence Packet Behavior
+
+Before dispatching `completion-verifier` or `final-reviewer`, the orchestrator should provide a final-review Evidence Packet when completion depends on repository inspection, call sites, related tests, external contracts, or version-specific behavior.
+
+Final-review agents should use this packet first and return `<needs_research>` if the verdict still requires additional discovery.
+
+---
+
 ## Core Principle
 
 Evidence before completion claims.
@@ -226,13 +234,22 @@ Do not use it for simple final reviews where the verdict is already clear from d
 
 ## Research Rule
 
+Use the Evidence Packet provided by the orchestrator before deciding whether more research is needed.
+
 Known exact path reads are not research.
 
-Agents may directly inspect files, diffs, artifacts, and evidence explicitly provided in their assigned context.
+Agents may directly inspect files, diffs, artifacts, exact known paths, and evidence explicitly provided in their assigned context.
 
-If additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond provided context, use `orchestrator-mediated-research`.
+If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, the agent must use `orchestrator-mediated-research`.
 
-When used by a subagent, `orchestrator-mediated-research` returns a structured `<needs_research>` XML handoff for the orchestrator to fulfill.
+When used by a subagent, `orchestrator-mediated-research` must produce a structured `<needs_research>` XML handoff for the orchestrator to fulfill.
+
+Mandatory research triggers:
+- the agent would need to inspect more than 2 unprovided files to make the decision safely
+- file ownership, related tests, call sites, import/export paths, or project conventions are unclear
+- a claim about repository behavior is not supported by provided evidence
+- external library, framework, API, or version behavior affects the decision
+- PASS / APPROVED / READY / completion would rely on guessing
 
 Required handoff shape:
 
@@ -245,25 +262,9 @@ Required handoff shape:
 </needs_research>
 ```
 
-Do not guess when required evidence is missing.
-
-## Workflow
-
-### Phase 0: Intake
-Read:
-- `docs/supercode/<work_id>/spec.md`
-- `docs/supercode/<work_id>/plan.md`
-
-Confirm:
-- active workspace is the isolated worktree
-- execute has completed
-- implementation is not still actively changing
-- final review has not already passed for this exact current code state
-
-If intake fails:
-- stop
-- do not issue PASS
-- report the missing prerequisite
+Use this boundary:
+- Known exact path or provided artifact -> direct read / inspect
+- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `<needs_research>`
 
 ---
 

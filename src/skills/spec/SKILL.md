@@ -144,6 +144,17 @@ Also clarify when relevant:
 
 ---
 
+## Evidence Packet Behavior
+
+During `spec`, the orchestrator should create an Evidence Packet when repository reality or external behavior materially affects clarification.
+
+Use explorer-backed internal evidence for existing implementation, project structure, tests, and conventions.
+Use librarian-backed external evidence for library/framework/API behavior and version-specific constraints.
+
+Do not wait for `spec-reviewer` to discover missing evidence if the need is already obvious.
+
+---
+
 ## Search Behavior
 
 Use internal discovery aggressively when the request depends on repository reality.

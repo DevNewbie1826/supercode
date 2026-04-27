@@ -279,13 +279,22 @@ Update todo state when each TDD step completes.
 
 ## Research Rule
 
+Use the Evidence Packet provided by the orchestrator before deciding whether more research is needed.
+
 Known exact path reads are not research.
 
-Agents may directly inspect files, diffs, artifacts, and evidence explicitly provided in their assigned context.
+Agents may directly inspect files, diffs, artifacts, exact known paths, and evidence explicitly provided in their assigned context.
 
-If additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond provided context, use `orchestrator-mediated-research`.
+If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, the agent must use `orchestrator-mediated-research`.
 
-When used by a subagent, `orchestrator-mediated-research` returns a structured `<needs_research>` XML handoff for the orchestrator to fulfill.
+When used by a subagent, `orchestrator-mediated-research` must produce a structured `<needs_research>` XML handoff for the orchestrator to fulfill.
+
+Mandatory research triggers:
+- the agent would need to inspect more than 2 unprovided files to make the decision safely
+- file ownership, related tests, call sites, import/export paths, or project conventions are unclear
+- a claim about repository behavior is not supported by provided evidence
+- external library, framework, API, or version behavior affects the decision
+- PASS / APPROVED / READY / completion would rely on guessing
 
 Required handoff shape:
 
@@ -298,27 +307,9 @@ Required handoff shape:
 </needs_research>
 ```
 
-Do not guess when required evidence is missing.
-
-## Verification Checklist
-
-Before claiming task completion, confirm:
-
-- [ ] every new behavior has a test where practical
-- [ ] each new behavior test was observed failing before implementation
-- [ ] each failing test failed for the expected reason
-- [ ] production code was written only after RED
-- [ ] minimal code was written to pass
-- [ ] relevant tests pass
-- [ ] output is clean
-- [ ] tests verify behavior, not just mocks
-- [ ] edge cases or error cases required by the task are covered
-- [ ] refactors were performed only after GREEN
-- [ ] tests stayed green after refactor
-- [ ] `testing-anti-patterns.md` was consulted when mocks or test utilities were involved
-
-If the checklist cannot be satisfied, do not claim TDD completion.
-Escalate the exception to the orchestrator.
+Use this boundary:
+- Known exact path or provided artifact -> direct read / inspect
+- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `<needs_research>`
 
 ---
 

@@ -111,6 +111,14 @@ Do not use this skill when:
 
 ---
 
+## Evidence Packet Behavior
+
+Before using `task-compliance-checker`, the orchestrator should provide an Evidence Packet when task clarity, dependencies, conflict surfaces, related tests, or project conventions depend on repository structure.
+
+This reduces guessing during alignment and makes `<needs_research>` a fallback rather than the first discovery step.
+
+---
+
 ## Alignment Questions
 
 For each planned task, determine:
@@ -258,13 +266,22 @@ The orchestrator should treat repeated or serious `task-compliance-checker` obje
 
 ## Research Rule
 
+Use the Evidence Packet provided by the orchestrator before deciding whether more research is needed.
+
 Known exact path reads are not research.
 
-Agents may directly inspect files, diffs, artifacts, and evidence explicitly provided in their assigned context.
+Agents may directly inspect files, diffs, artifacts, exact known paths, and evidence explicitly provided in their assigned context.
 
-If additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond provided context, use `orchestrator-mediated-research`.
+If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, the agent must use `orchestrator-mediated-research`.
 
-When used by a subagent, `orchestrator-mediated-research` returns a structured `<needs_research>` XML handoff for the orchestrator to fulfill.
+When used by a subagent, `orchestrator-mediated-research` must produce a structured `<needs_research>` XML handoff for the orchestrator to fulfill.
+
+Mandatory research triggers:
+- the agent would need to inspect more than 2 unprovided files to make the decision safely
+- file ownership, related tests, call sites, import/export paths, or project conventions are unclear
+- a claim about repository behavior is not supported by provided evidence
+- external library, framework, API, or version behavior affects the decision
+- PASS / APPROVED / READY / completion would rely on guessing
 
 Required handoff shape:
 
@@ -277,20 +294,9 @@ Required handoff shape:
 </needs_research>
 ```
 
-Do not guess when required evidence is missing.
-
-## Alignment Standard
-
-A valid alignment package must answer all of the following:
-
-- What runs first?
-- What can run together?
-- What must not run together?
-- What makes each task “done”?
-- What assumptions are still in force from planning?
-- Where would execution fail if batching is too optimistic?
-
-If those answers are not explicit, alignment is not complete.
+Use this boundary:
+- Known exact path or provided artifact -> direct read / inspect
+- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `<needs_research>`
 
 ---
 
