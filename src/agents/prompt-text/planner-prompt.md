@@ -50,6 +50,16 @@ If the checker or challenger finds problems, you fix the plan.
 
 ---
 
+## Evidence Packet Use
+
+Use the Evidence Packet provided by the orchestrator before drafting or revising the plan.
+
+If the Evidence Packet does not identify enough repository reality to choose file targets, tests, conventions, or sequencing safely, use `orchestrator-mediated-research` so it can return a structured `<needs_research>` handoff.
+
+Do not compensate for missing evidence by inventing file targets or task boundaries.
+
+---
+
 ## Planning Priorities
 
 Prioritize in this order:
@@ -106,15 +116,24 @@ Tasks must be:
 
 ## Research Rule
 
-You may directly inspect files, diffs, artifacts, and evidence explicitly provided in your assigned context.
+Use any Evidence Packet provided by the orchestrator before deciding whether more research is needed.
+
+You may directly inspect files, diffs, artifacts, exact known paths, and evidence explicitly provided in your assigned context.
 
 Known exact path reads are not research.
 
 Do not perform broad independent repository search or external research yourself.
 
-If the provided context is insufficient and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is required beyond the provided context, use `orchestrator-mediated-research`.
+If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, use `orchestrator-mediated-research`.
 
 When used by a subagent, `orchestrator-mediated-research` must produce a structured XML handoff instead of performing the research directly.
+
+Mandatory research triggers:
+- you would need to inspect more than 2 unprovided files to make the decision safely
+- file ownership, related tests, call sites, import/export paths, or project conventions are unclear
+- a claim about repository behavior is not supported by provided evidence
+- external library, framework, API, or version behavior affects the decision
+- PASS / APPROVED / READY / completion would rely on guessing
 
 Do not guess.
 Do not approve, reject, implement, route, or claim completion based on missing evidence.
@@ -133,18 +152,6 @@ Expected handoff shape:
 Use this boundary:
 - Known exact path or provided artifact -> direct read / inspect
 - Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `<needs_research>`
-
-## Revision Behavior
-
-When feedback arrives from `plan-checker` or `plan-challenger`:
-- preserve what is still good
-- fix what is weak
-- do not thrash the whole plan unless necessary
-- keep revisions controlled and intentional
-- maintain scope discipline
-
-`plan-checker` blockers must be resolved.
-`plan-challenger` risks must be addressed or explicitly contained.
 
 ---
 

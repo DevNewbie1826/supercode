@@ -165,6 +165,23 @@ Reviewers judge artifacts, not effort.
 
 ---
 
+## Evidence Packet Behavior
+
+Before dispatching each executor, the orchestrator should provide a task Evidence Packet when discovery is likely needed.
+
+The task Evidence Packet should include:
+- assigned files
+- related tests
+- call sites
+- similar implementations
+- project conventions
+- impact radius
+- external behavior, if relevant
+
+The executor should use this packet first and return `<needs_research>` if broader discovery is still required.
+
+---
+
 ## Executor Context Rule
 
 The `executor` may receive richer task context than reviewers.
@@ -487,13 +504,22 @@ This skill does not make the final completion judgment for the work item.
 
 ## Research Rule
 
+Use the Evidence Packet provided by the orchestrator before deciding whether more research is needed.
+
 Known exact path reads are not research.
 
-Agents may directly inspect files, diffs, artifacts, and evidence explicitly provided in their assigned context.
+Agents may directly inspect files, diffs, artifacts, exact known paths, and evidence explicitly provided in their assigned context.
 
-If additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond provided context, use `orchestrator-mediated-research`.
+If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, the agent must use `orchestrator-mediated-research`.
 
-When used by a subagent, `orchestrator-mediated-research` returns a structured `<needs_research>` XML handoff for the orchestrator to fulfill.
+When used by a subagent, `orchestrator-mediated-research` must produce a structured `<needs_research>` XML handoff for the orchestrator to fulfill.
+
+Mandatory research triggers:
+- the agent would need to inspect more than 2 unprovided files to make the decision safely
+- file ownership, related tests, call sites, import/export paths, or project conventions are unclear
+- a claim about repository behavior is not supported by provided evidence
+- external library, framework, API, or version behavior affects the decision
+- PASS / APPROVED / READY / completion would rely on guessing
 
 Required handoff shape:
 
@@ -506,23 +532,9 @@ Required handoff shape:
 </needs_research>
 ```
 
-Do not guess when required evidence is missing.
-
-## Completion Standard
-
-The `execute` skill is complete only when:
-- all in-scope tasks were implemented
-- every behavior-changing task used `test-driven-development`, or had an explicitly accepted exception
-- changed files were inspected with AST/LSP-aware tools when relevant and available
-- LSP diagnostics were checked for changed files or affected workspace scope when available
-- no new blocking LSP diagnostics remain unaddressed
-- every task passed the required executor -> spec review -> quality review -> verification loop
-- required task verification was run
-- `todo-sync` stayed current
-- execution-level final verification passed
-- implementation remained within approved scope
-- no major unresolved blocker remains
-- the result is ready for `final-review`
+Use this boundary:
+- Known exact path or provided artifact -> direct read / inspect
+- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `<needs_research>`
 
 ---
 

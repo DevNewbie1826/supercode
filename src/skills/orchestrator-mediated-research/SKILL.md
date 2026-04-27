@@ -19,6 +19,42 @@ This is a shared utility skill, but its behavior depends on who is using it.
 
 ---
 
+## Evidence Packet
+
+An Evidence Packet is the preferred way to give subagents the context they need before they start work.
+
+The orchestrator should proactively create an Evidence Packet when a stage or task likely depends on repository structure, call sites, related tests, project conventions, external behavior, or version-specific documentation.
+
+Recommended shape:
+
+```markdown
+## Evidence Packet
+
+### Internal Evidence
+- relevant files:
+- call sites:
+- related tests:
+- conventions:
+- impact radius:
+- unresolved internal uncertainty:
+
+### External Evidence
+- official docs:
+- version notes:
+- API/library behavior:
+- unresolved external uncertainty:
+
+### Evidence Scope
+- checked:
+- not checked:
+```
+
+Subagents should use the Evidence Packet first.
+
+If the Evidence Packet is insufficient, they should return a structured `<needs_research>` handoff instead of guessing.
+
+---
+
 ## Role-Aware Behavior
 
 ### If you are the orchestrator
@@ -38,7 +74,12 @@ Do not perform the research yourself.
 
 Do not call `explorer_agent` or `librarian_agent`.
 
-If additional evidence is needed beyond your assigned context, emit a structured `<needs_research>` XML handoff and stop your current judgment until the orchestrator returns evidence.
+First use any Evidence Packet and assigned artifacts provided by the orchestrator.
+
+If that context is insufficient, emit a structured `<needs_research>` XML handoff and stop your current judgment until the orchestrator returns evidence.
+
+Do not continue by manually reading around the repository when broad discovery is needed.
+Do not return PASS, APPROVED, READY, completion, or routing decisions based on missing evidence.
 
 ---
 
@@ -115,6 +156,21 @@ If both internal and external investigation are required:
 2. Then use `librarian_agent` to compare that behavior against official documentation, best practices, or third-party source evidence.
 3. Keep scopes distinct.
 4. Do not duplicate the same search across both agents.
+
+---
+
+## Mandatory Research Triggers
+
+A subagent should return `<needs_research>` when any of these are true:
+
+- it would need to inspect more than 2 unprovided files to decide safely
+- file ownership, related tests, call sites, import/export paths, or project conventions are unclear
+- a claim about repository behavior is not supported by assigned context or the Evidence Packet
+- external library, framework, API, or version behavior affects the decision
+- PASS / APPROVED / READY / completion would rely on guessing
+
+The goal is not to maximize research calls.
+The goal is to prevent expensive or judgment-oriented agents from quietly doing broad discovery or guessing.
 
 ---
 

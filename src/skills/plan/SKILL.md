@@ -183,6 +183,22 @@ Documented unknowns are acceptable only if they are bounded and do not block pla
 
 ---
 
+## Evidence Packet Behavior
+
+Before dispatching `planner`, the orchestrator should create a planning Evidence Packet when file targets, tests, conventions, dependencies, or external behavior may affect the plan.
+
+The planning Evidence Packet should include:
+- relevant files
+- related tests
+- similar implementations
+- project conventions
+- external constraints, if any
+- unresolved uncertainty
+
+Planner, checker, and challenger should use this packet before returning `<needs_research>`.
+
+---
+
 ## Context Gathering Rules
 
 Before dispatching `planner`, gather enough context to avoid speculative planning.

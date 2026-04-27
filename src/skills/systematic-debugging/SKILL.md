@@ -139,15 +139,32 @@ The output does not need to be saved as a workflow artifact unless the system ch
 
 ---
 
+## Evidence Packet Behavior
+
+Before dispatching `systematic-debugger`, the orchestrator should provide a debugging Evidence Packet when failure analysis depends on files, logs, call paths, related tests, timing behavior, external contracts, or project conventions.
+
+The debugger should use this packet first and return `<needs_research>` if root-cause tracing still requires additional discovery.
+
+---
+
 ## Research Rule
+
+Use the Evidence Packet provided by the orchestrator before deciding whether more research is needed.
 
 Known exact path reads are not research.
 
-Agents may directly inspect files, diffs, artifacts, and evidence explicitly provided in their assigned context.
+Agents may directly inspect files, diffs, artifacts, exact known paths, and evidence explicitly provided in their assigned context.
 
-If additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is needed beyond provided context, use `orchestrator-mediated-research`.
+If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, the agent must use `orchestrator-mediated-research`.
 
-When used by a subagent, `orchestrator-mediated-research` returns a structured `<needs_research>` XML handoff for the orchestrator to fulfill.
+When used by a subagent, `orchestrator-mediated-research` must produce a structured `<needs_research>` XML handoff for the orchestrator to fulfill.
+
+Mandatory research triggers:
+- the agent would need to inspect more than 2 unprovided files to make the decision safely
+- file ownership, related tests, call sites, import/export paths, or project conventions are unclear
+- a claim about repository behavior is not supported by provided evidence
+- external library, framework, API, or version behavior affects the decision
+- PASS / APPROVED / READY / completion would rely on guessing
 
 Required handoff shape:
 
@@ -160,26 +177,9 @@ Required handoff shape:
 </needs_research>
 ```
 
-Do not guess when required evidence is missing.
-
-## Sequential Thinking Guidance
-
-If a sequential thinking tool is available, use it when:
-- multiple root-cause candidates are plausible
-- the failure crosses multiple layers
-- evidence is internally conflicting
-- timing or state ordering may be involved
-- prior attempts were inconclusive
-- the correct routing target is not obvious
-
-Use it to:
-- separate evidence from interpretation
-- branch and revise hypotheses
-- compare causal chains
-- eliminate weak explanations systematically
-- converge on the smallest credible root-cause path
-
-Do not use it for trivial failures where direct evidence is already sufficient.
+Use this boundary:
+- Known exact path or provided artifact -> direct read / inspect
+- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `<needs_research>`
 
 ---
 

@@ -468,6 +468,61 @@ Return only:
 Do not include unrelated exploration notes.
 Do not include other subagents' private context.
 
+---
+
+## Evidence Packet Rule
+
+Do not wait for subagents to request research when a stage obviously needs repository or external context.
+
+Before dispatching planner, executor, reviewers, final-review agents, or debugger, consider whether an Evidence Packet is needed.
+
+Create an Evidence Packet proactively when the work depends on:
+- repository structure
+- file ownership
+- related tests
+- call sites
+- project conventions
+- import/export paths
+- impact radius
+- external library/framework/API behavior
+- version-specific documentation
+
+Evidence Packet format:
+
+```markdown
+## Evidence Packet
+
+### Internal Evidence
+- relevant files:
+- call sites:
+- related tests:
+- conventions:
+- impact radius:
+- unresolved internal uncertainty:
+
+### External Evidence
+- official docs:
+- version notes:
+- API/library behavior:
+- unresolved external uncertainty:
+
+### Evidence Scope
+- checked:
+- not checked:
+```
+
+Use `explorer_agent` for internal evidence.
+Use `librarian_agent` for external evidence.
+If both are needed, use explorer first, then librarian.
+
+Pass only the relevant Evidence Packet subset into each subagent context.
+
+If a subagent later returns `<needs_research>`, fulfill it and resume the same subagent with the new evidence.
+
+---
+
+
+
 
 ## Context Isolation Rules
 
@@ -542,6 +597,7 @@ For parallel executor runs:
 ---
 
 ## Spec Stage Duties
+- Create an initial Evidence Packet when repository or external context is likely needed.
 
 When entering `spec`:
 
@@ -584,6 +640,7 @@ If degraded baseline acceptance is needed, ask through the `question` tool.
 ---
 
 ## Plan Stage Duties
+- Create a planning Evidence Packet before dispatching planner/checker/challenger when file targets, tests, conventions, dependencies, or external constraints matter.
 
 When entering `plan`:
 
@@ -601,6 +658,7 @@ Do not let planner implement code.
 ---
 
 ## Pre-Execute Alignment Duties
+- Provide task-compliance-checker with relevant Evidence Packet context when task clarity or dependency risk depends on repository structure.
 
 When entering `pre-execute-alignment`:
 
@@ -617,6 +675,8 @@ When entering `pre-execute-alignment`:
 ---
 
 ## Execute Stage Duties
+- Create task Evidence Packets before executor dispatch when file ownership, tests, call sites, conventions, impact radius, or external behavior matter.
+- Provide reviewers with artifact-focused context plus only the relevant Evidence Packet subset.
 
 When entering `execute`:
 
@@ -660,6 +720,7 @@ Fresh executor replacement is an escalation tool, not the default.
 ---
 
 ## Debugging Duties
+- Provide systematic-debugger with a debugging Evidence Packet when root-cause tracing depends on files, logs, call paths, related tests, timing behavior, external contracts, or conventions.
 
 Use `systematic-debugging` when:
 - a failure is real but root cause is unclear
@@ -674,6 +735,7 @@ Do not jump straight from unclear failure to code changes.
 ---
 
 ## Final Review Duties
+- Create a final-review Evidence Packet when completion depends on repository inspection or external contracts.
 
 When entering `final-review`:
 

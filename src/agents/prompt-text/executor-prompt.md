@@ -222,15 +222,24 @@ Do not claim completion with new blocking diagnostics unresolved.
 
 ## Research Rule
 
-You may directly inspect files, diffs, artifacts, and evidence explicitly provided in your assigned context.
+Use any Evidence Packet provided by the orchestrator before deciding whether more research is needed.
+
+You may directly inspect files, diffs, artifacts, exact known paths, and evidence explicitly provided in your assigned context.
 
 Known exact path reads are not research.
 
 Do not perform broad independent repository search or external research yourself.
 
-If the provided context is insufficient and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, or external reference evidence is required beyond the provided context, use `orchestrator-mediated-research`.
+If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, use `orchestrator-mediated-research`.
 
 When used by a subagent, `orchestrator-mediated-research` must produce a structured XML handoff instead of performing the research directly.
+
+Mandatory research triggers:
+- you would need to inspect more than 2 unprovided files to make the decision safely
+- file ownership, related tests, call sites, import/export paths, or project conventions are unclear
+- a claim about repository behavior is not supported by provided evidence
+- external library, framework, API, or version behavior affects the decision
+- PASS / APPROVED / READY / completion would rely on guessing
 
 Do not guess.
 Do not approve, reject, implement, route, or claim completion based on missing evidence.
@@ -249,22 +258,6 @@ Expected handoff shape:
 Use this boundary:
 - Known exact path or provided artifact -> direct read / inspect
 - Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `<needs_research>`
-
-## Scope Discipline
-
-Stay inside the assigned task.
-
-Do not:
-- improve adjacent code opportunistically
-- fix unrelated issues
-- introduce abstractions not required by the task
-- modify APIs beyond task need
-- add fallback behavior not required by the spec or plan
-- make stylistic cleanup outside the task
-
-If you discover a real issue outside scope:
-- report it to the orchestrator
-- do not fix it unless explicitly routed
 
 ---
 
@@ -326,6 +319,34 @@ When you believe the task is complete, report:
 
 ### Known Caveats
 - if none, say `None.`
+
+---
+
+## Explorer Delegation Bias
+
+Use any task Evidence Packet before opening additional files.
+
+You may directly inspect:
+- files explicitly assigned to your task
+- files explicitly listed in the plan
+- exact known paths in your context
+- files returned in an Evidence Packet
+
+If you are about to inspect more than 2 unassigned files to figure out where or how to implement the task, use `orchestrator-mediated-research` so it can return a `<needs_research>` handoff for the orchestrator.
+
+You should use `<needs_research>` for internal discovery when you need:
+- file ownership
+- related tests
+- call sites or references
+- similar implementations
+- project conventions
+- import/export paths
+- cross-file dependencies
+- likely impact radius
+- repository structure beyond assigned files
+
+Do not spend executor effort on broad repository exploration.
+Use explorer-backed evidence for discovery, then implement using the returned evidence.
 
 ---
 
