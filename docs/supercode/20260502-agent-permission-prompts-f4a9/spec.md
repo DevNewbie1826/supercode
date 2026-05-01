@@ -6,7 +6,7 @@
 
 Prepare and begin an isolated Supercode work item for semi-manual updates to agent permission defaults and agent prompt guidance, informed by the prior comparison between Supercode and oh-my-openagent (OMO).
 
-The first implementation change in scope is limited to the `explorer` agent permission policy. Prompt edits are still deferred for user-led follow-up.
+The first implementation change applied the `explorer` agent permission policy. The next approved implementation change is limited to the `librarian` agent permission policy. Prompt edits are still deferred for user-led follow-up.
 
 # Current State
 
@@ -24,7 +24,10 @@ The first implementation change in scope is limited to the `explorer` agent perm
 
 Create an isolated worktree where the user and assistant can semi-manually update Supercode agent permission settings and prompt instructions without modifying the main working tree.
 
-Apply the first agreed permission change: make `explorer` OMO-like for non-writing capabilities while explicitly denying `.env` reads to avoid hidden nested approval hangs.
+Apply the agreed permission changes:
+
+- make `explorer` OMO-like for non-writing capabilities while explicitly denying `.env` reads to avoid hidden nested approval hangs
+- make `librarian` OMO-like while explicitly denying `.env` reads
 
 # Scope
 
@@ -42,10 +45,18 @@ Included:
   - add `doom_loop: "deny"`
   - ensure `read` permission rules can be preserved and applied for `*.env`, `*.env.*`, and `*.env.example`
   - add `explorer` read rules: deny `*.env`, deny `*.env.*`, allow `*.env.example`
+- Update only `librarian` permission handling for the next change:
+  - keep write/modification permissions denied: `edit`, `apply_patch`, `ast_grep_replace`, `lsp_rename`
+  - keep delegation denied: `task`
+  - remove `bash: "deny"` so `librarian` follows OMO-like behavior for shell availability
+  - add `external_directory: "allow"`
+  - add `webfetch: "allow"`
+  - add `doom_loop: "deny"`
+  - add `librarian` read rules: deny `*.env`, deny `*.env.*`, allow `*.env.example`
 
 Excluded:
 
-- No permission default changes except the explicit `explorer` permission policy above.
+- No permission default changes except the explicit `explorer` and `librarian` permission policies above.
 - No prompt text changes in this first implementation change.
 - No implementation of a new `call_supercode_research_agent` tool.
 - No broad rewrite of the Supercode workflow stages.
@@ -55,16 +66,16 @@ Excluded:
 
 # Non-Goals
 
-- Do not edit agent permission files other than the files required to apply the explicit `explorer` permission policy.
+- Do not edit agent permission files other than the files required to apply the explicit `explorer` and `librarian` permission policies.
 - Do not edit agent prompt files during this work item.
-- Do not grant or revoke any tool permissions beyond the explicit `explorer` permission policy.
+- Do not grant or revoke any tool permissions beyond the explicit `explorer` and `librarian` permission policies.
 - Do not change production implementation code outside the approved worktree.
 
 # Constraints
 
 - Work must proceed in `.worktrees/20260502-agent-permission-prompts-f4a9/` after spec approval and worktree creation.
 - The user wants permission and prompt updates to proceed semi-manually after the worktree exists.
-- This spec decides only the first `explorer` permission policy. It does not decide final policies for executor, librarian, reviewers, or prompt text.
+- This spec decides only the `explorer` and `librarian` permission policies. It does not decide final policies for executor, reviewers, or prompt text.
 - Later edits should use the captured evidence as context but require explicit user direction before changing files.
 - If Supercode config normalization currently drops `read` permission rules, update the allowed root permission keys narrowly so `read` rules are preserved.
 
@@ -80,16 +91,22 @@ Excluded:
   - `external_directory: "allow"`, `webfetch: "allow"`, and `doom_loop: "deny"` are set
   - write/delegation mutation tools remain denied
   - `.env` and `.env.*` read rules are explicit deny; `.env.example` read is allow
+- `librarian` permissions reflect the agreed policy:
+  - `bash: "deny"` is no longer set on `librarian`
+  - `external_directory: "allow"`, `webfetch: "allow"`, and `doom_loop: "deny"` are set
+  - write/delegation mutation tools remain denied
+  - `.env` and `.env.*` read rules are explicit deny; `.env.example` read is allow
 - Prompt files remain unchanged.
 - Tests and typecheck pass after the change.
 
 # Risks / Unknowns
 
 - Baseline verification may expose unrelated existing failures; if so, worktree readiness may require degraded baseline acceptance.
-- The exact user-preferred balance for agents other than `explorer` remains intentionally deferred to the later semi-manual editing phase.
+- The exact user-preferred balance for agents other than `explorer` and `librarian` remains intentionally deferred to the later semi-manual editing phase.
 - Adding `read` permission patterns may require confirming whether Supercode’s config normalization currently preserves nested read rules; if not, schema/config support must be narrowly expanded for `read`.
 
 # Revisions
 
 - 2026-05-02: Initial spec for permission/prompt update worktree preparation.
 - 2026-05-02: Scope expanded by user request to apply the first `explorer` permission policy change; prompt edits remain deferred.
+- 2026-05-02: Scope expanded by user request to apply OMO-like `librarian` permissions with `.env` read denial; prompt edits remain deferred.
