@@ -37,6 +37,7 @@ const ROOT_AGENT_PERMISSION_KEYS = new Set([
   "external_directory",
   "lsp_rename",
   "question",
+  "read",
   "task",
   "webfetch",
 ])

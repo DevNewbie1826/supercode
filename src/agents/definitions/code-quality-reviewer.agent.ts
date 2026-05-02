@@ -21,7 +21,6 @@ export const codeQualityReviewerAgent: AgentDefinition = {
     permission: {
       apply_patch: "deny",
       edit: "deny",
-      bash: "deny",
       ast_grep_replace: "deny",
       lsp_rename: "deny",
       task: "deny",
