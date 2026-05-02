@@ -64,4 +64,28 @@ describe("loadSupercodeConfig", () => {
   it("returns the default global config path", () => {
     expect(getDefaultGlobalSupercodeConfigPath()).toBe(join(process.env.HOME || "", ".config", "opencode", "supercode.json"))
   })
+
+  it("preserves nested read permission rules during config normalization", () => {
+    const directory = createDirectoryWithSupercodeConfig(JSON.stringify({
+      agent: {
+        explorer: {
+          permission: {
+            read: {
+              "*.env": "deny",
+              "*.env.*": "deny",
+              "*.env.example": "allow",
+            },
+          },
+        },
+      },
+    }))
+
+    const config = loadSupercodeConfig(directory, { globalConfigPath: "/nonexistent/supercode-config-test-global.json" })
+
+    expect(config.agent?.explorer?.permission?.read).toEqual({
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow",
+    })
+  })
 })

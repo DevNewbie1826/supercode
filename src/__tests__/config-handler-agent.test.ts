@@ -268,6 +268,116 @@ describe("createConfigHandler orchestrator agent registration", () => {
   })
 })
 
+describe("createConfigHandler explorer permission emission", () => {
+  it("emits the approved explorer permission state with nested read rules", async () => {
+    const config: Record<string, unknown> = {}
+
+    await createConfigHandler("/test/directory")(config)
+
+    const explorerPermission = (config.agent as Record<string, Record<string, unknown>>).explorer?.permission as Record<string, unknown>
+
+    // bash must be absent
+    expect(explorerPermission).not.toHaveProperty("bash")
+
+    // write/delegation tools remain denied
+    expect(explorerPermission).toMatchObject({
+      apply_patch: "deny",
+      edit: "deny",
+      ast_grep_replace: "deny",
+      lsp_rename: "deny",
+      task: "deny",
+    })
+
+    // OMO-like allowances and explicit deny
+    expect(explorerPermission).toMatchObject({
+      external_directory: "allow",
+      webfetch: "allow",
+      doom_loop: "deny",
+    })
+
+    // nested read rules emitted exactly
+    expect(explorerPermission.read).toEqual({
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow",
+    })
+  })
+})
+
+describe("createConfigHandler librarian permission emission", () => {
+  it("emits the approved librarian permission state with nested read rules", async () => {
+    const config: Record<string, unknown> = {}
+
+    await createConfigHandler("/test/directory")(config)
+
+    const librarianPermission = (config.agent as Record<string, Record<string, unknown>>).librarian?.permission as Record<string, unknown>
+
+    // bash must be absent
+    expect(librarianPermission).not.toHaveProperty("bash")
+
+    // write/delegation tools remain denied
+    expect(librarianPermission).toMatchObject({
+      apply_patch: "deny",
+      edit: "deny",
+      ast_grep_replace: "deny",
+      lsp_rename: "deny",
+      task: "deny",
+    })
+
+    // OMO-like allowances and explicit deny
+    expect(librarianPermission).toMatchObject({
+      external_directory: "allow",
+      webfetch: "allow",
+      doom_loop: "deny",
+    })
+
+    // nested read rules emitted exactly
+    expect(librarianPermission.read).toEqual({
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow",
+    })
+  })
+})
+
+describe("createConfigHandler remaining built-in agent bash-only alignment", () => {
+  const remainingAgentNames = [
+    "task-compliance-checker",
+    "spec-reviewer",
+    "final-reviewer",
+    "code-quality-reviewer",
+    "systematic-debugger",
+    "plan-checker",
+    "completion-verifier",
+    "plan-challenger",
+    "code-spec-reviewer",
+  ]
+
+  it("emits no bash deny for remaining built-in agents while preserving non-bash permissions", async () => {
+    const config: Record<string, unknown> = {}
+
+    await createConfigHandler("/test/directory")(config)
+
+    const agentConfig = config.agent as Record<string, Record<string, unknown>>
+
+    for (const agentName of remainingAgentNames) {
+      const permission = agentConfig[agentName]?.permission as Record<string, unknown> | undefined
+
+      // bash must be absent from emitted permissions
+      expect(permission).not.toHaveProperty("bash")
+
+      // non-bash permissions preserved exactly
+      expect(permission).toMatchObject({
+        apply_patch: "deny",
+        edit: "deny",
+        ast_grep_replace: "deny",
+        lsp_rename: "deny",
+        task: "deny",
+      })
+    }
+  })
+})
+
 describe("createConfigHandler default_agent for orchestrator", () => {
   it("sets default_agent to orchestrator when config is empty", async () => {
     const config: Record<string, unknown> = {}
