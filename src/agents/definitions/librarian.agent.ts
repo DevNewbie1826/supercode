@@ -22,10 +22,17 @@ const librarianAgent: AgentDefinition = {
     permission: {
       apply_patch: "deny",
       edit: "deny",
-      bash: "deny",
       ast_grep_replace: "deny",
       lsp_rename: "deny",
       task: "deny",
+      external_directory: "allow",
+      webfetch: "allow",
+      doom_loop: "deny",
+      read: {
+        "*.env": "deny",
+        "*.env.*": "deny",
+        "*.env.example": "allow",
+      },
     },
   },
 };
