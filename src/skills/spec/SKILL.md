@@ -108,7 +108,7 @@ The spec must contain:
 7. Aggressively investigate uncertainty instead of waiting passively for the user to volunteer everything.
 8. Use `explorer_agent` aggressively for internal repository reality.
 9. Use `librarian_agent` aggressively for external behavior, docs, and third-party semantics.
-10. If research is needed, use `orchestrator-mediated-research`.
+10. If research is needed, use `research-delegation`.
 11. Do not proceed while core ambiguity still forces downstream guessing.
 12. Do not present assumptions as facts.
 13. Do not force the user to read the raw file by default; explain the spec clearly first.
@@ -141,6 +141,13 @@ Also clarify when relevant:
 - risks
 - assumptions requiring explicit acceptance
 - whether the request is too large and must be decomposed into subprojects
+
+For user-facing product, UI, or UX requests, also clarify and document the minimum product-complete outcome:
+- the intended user-visible path or interaction
+- required states such as empty, loading, error, and success when in scope
+- acceptance criteria beyond raw text, placeholder UI, or mere function presence
+
+Do not add these product-completeness requirements for internal, prompt, config-only, tooling-only, or backend-only work unless the user request makes them part of scope.
 
 ---
 
@@ -181,7 +188,7 @@ Repeat this loop until the request is planning-ready:
 1. Read the latest user message.
 2. Identify the highest-value remaining ambiguity.
 3. Decide whether internal evidence, external evidence, or both are needed.
-4. Use `orchestrator-mediated-research` when evidence is needed.
+4. Use `research-delegation` when evidence is needed.
 5. Reconcile user statements with gathered evidence.
 6. Update the current understanding of:
    - known facts
@@ -301,6 +308,18 @@ Fix issues inline before review.
 
 ---
 
+## Reviewer Session Freshness Rule
+
+`spec-reviewer` must use a fresh review session by default for each approval attempt.
+
+Do not reuse a `spec-reviewer` session if it:
+- helped draft or revise the spec
+- received orchestrator reasoning, draft-writing narrative, or self-justification
+- reviewed an older rejected version and cannot cleanly judge the current artifact only
+- performed research or otherwise left the read-only reviewer role
+
+---
+
 ## Reviewer Isolation Rule
 
 `spec-reviewer` must review the spec from artifact-focused context only.
@@ -308,7 +327,7 @@ Fix issues inline before review.
 The reviewer may receive:
 - `docs/supercode/<work_id>/spec.md`
 - minimal necessary evidence gathered during clarification
-- minimal necessary repository or external findings returned through `orchestrator-mediated-research`
+- minimal necessary repository or external findings returned through `research-delegation`
 
 The reviewer must not receive:
 - orchestrator reasoning chains
@@ -406,5 +425,5 @@ If the user rejects the explanation:
 
 If review repeatedly fails because evidence is missing:
 - investigate more aggressively
-- use `explorer_agent` and `librarian_agent` through `orchestrator-mediated-research`
+- use `explorer_agent` and `librarian_agent` through `research-delegation`
 - do not hand off early

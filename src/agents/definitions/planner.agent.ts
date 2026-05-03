@@ -21,6 +21,11 @@ export const plannerAgent: AgentDefinition = {
     permission: {
       apply_patch: "deny",
       edit: "allow",
+      task: {
+        "*": "deny",
+        explorer: "allow",
+        librarian: "allow",
+      },
     },
   },
 };

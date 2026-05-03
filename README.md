@@ -118,7 +118,7 @@ Supercode bundles these built-in skills:
 - `execute`
 - `final-review`
 - `finish`
-- `orchestrator-mediated-research`
+- `research-delegation`
 - `plan`
 - `playwright-cli`
 - `pre-execute-alignment`
@@ -196,7 +196,7 @@ Example excerpt:
 {
   "agent": {
     "orchestrator": {
-      "description": "Use as the main user-facing coordinator that drives the full Supercode workflow, delegates to skills and subagents, manages research routing, keeps todo state synced, asks all blocking user questions through the question tool, and enforces all gates.",
+      "description": "Use as the main user-facing coordinator that drives the full Supercode workflow, delegates to skills and subagents, gates research delegation, keeps todo state synced, asks all blocking user questions through the question tool, and enforces all gates.",
       "prompt": "<bundled orchestrator prompt>",
       "mode": "primary",
       "model": "openai/gpt-5.4",
@@ -218,7 +218,12 @@ Example excerpt:
       "permission": {
         "apply_patch": "deny",
         "edit": "allow",
-        "todowrite": "allow"
+        "todowrite": "allow",
+        "task": {
+          "*": "deny",
+          "explorer": "allow",
+          "librarian": "allow"
+        }
       }
     }
   }

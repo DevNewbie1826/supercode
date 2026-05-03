@@ -86,7 +86,7 @@ This output does not need to be saved as a file unless your environment wants to
 5. Do not allow execution to infer missing verification criteria.
 6. Do not allow optimistic parallelism when conflicts are plausible.
 7. Use conservative batching when certainty is low.
-8. Known exact paths may be read directly; if additional discovery or external reference evidence is needed, route it through `orchestrator-mediated-research`.
+8. Known exact paths may be read directly; if additional discovery or external reference evidence is needed, route it through `research-delegation`.
 9. Do not perform broad independent research outside that mechanism.
 10. Treat hidden dependency risk as a real blocker.
 11. Prefer blocking early over letting `execute` discover preventable coordination failures.
@@ -115,7 +115,7 @@ Do not use this skill when:
 
 Before using `task-compliance-checker`, the orchestrator should provide an Evidence Packet when task clarity, dependencies, conflict surfaces, related tests, or project conventions depend on repository structure.
 
-This reduces guessing during alignment and makes `<needs_research>` a fallback rather than the first discovery step.
+This reduces guessing during alignment and makes delegated research a fallback rather than the first discovery step.
 
 ---
 
@@ -264,6 +264,18 @@ The orchestrator should treat repeated or serious `task-compliance-checker` obje
 
 ---
 
+## Checker Session Freshness Rule
+
+`task-compliance-checker` must use a fresh checker session by default for each alignment run or reopened plan revision.
+
+Do not reuse a checker session if it:
+- helped write or revise the plan
+- received orchestrator batching decisions as conclusions before checking task readiness
+- reviewed a different plan revision and cannot cleanly judge the current task artifact only
+- performed research or otherwise left the read-only checker role
+
+---
+
 ## Research Rule
 
 Use the Evidence Packet provided by the orchestrator before deciding whether more research is needed.
@@ -272,9 +284,9 @@ Known exact path reads are not research.
 
 Agents may directly inspect files, diffs, artifacts, exact known paths, and evidence explicitly provided in their assigned context.
 
-If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, the agent must use `orchestrator-mediated-research`.
+If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, the agent must use `research-delegation` directly for a bounded evidence request.
 
-When used by a subagent, `orchestrator-mediated-research` must produce a structured `<needs_research>` XML handoff for the orchestrator to fulfill.
+Research delegation gathers evidence only. It does not let `task-compliance-checker` rewrite the plan, decide batching, change gates, or take over final alignment authority.
 
 Mandatory research triggers:
 - the agent would need to inspect more than 2 unprovided files to make the decision safely
@@ -283,20 +295,11 @@ Mandatory research triggers:
 - external library, framework, API, or version behavior affects the decision
 - PASS / APPROVED / READY / completion would rely on guessing
 
-Required handoff shape:
-
-```xml
-<needs_research>
-  <type>internal|external|both</type>
-  <question>[precise research question]</question>
-  <why_needed>[why this evidence is required to continue safely]</why_needed>
-  <current_blocker>[the judgment or action that cannot be completed without this evidence]</current_blocker>
-</needs_research>
-```
+Research requests must state the evidence type, precise question, why the evidence is needed, and the judgment blocked until it arrives.
 
 Use this boundary:
 - Known exact path or provided artifact -> direct read / inspect
-- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `<needs_research>`
+- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> use `research-delegation` directly with a bounded evidence request
 
 ---
 

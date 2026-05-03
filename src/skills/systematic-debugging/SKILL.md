@@ -132,7 +132,7 @@ The output does not need to be saved as a workflow artifact unless the system ch
 9. Do not broaden the investigation beyond the failure unless evidence requires it.
 10. Distinguish observed facts from hypotheses.
 11. Prefer narrow reproductions over broad speculation.
-12. Known exact paths may be read directly; if additional discovery or external reference evidence is needed, route it through `orchestrator-mediated-research`.
+12. Known exact paths may be read directly; if additional discovery or external reference evidence is needed, route it through `research-delegation`.
 13. If timing is suspected, use `condition-based-waiting.md`.
 14. If the failure escaped too far downstream, use `defense-in-depth.md`.
 15. If causal path is unclear, use `root-cause-tracing.md`.
@@ -143,7 +143,7 @@ The output does not need to be saved as a workflow artifact unless the system ch
 
 Before dispatching `systematic-debugger`, the orchestrator should provide a debugging Evidence Packet when failure analysis depends on files, logs, call paths, related tests, timing behavior, external contracts, or project conventions.
 
-The debugger should use this packet first and return `<needs_research>` if root-cause tracing still requires additional discovery.
+The debugger should use this packet first and use `research-delegation` directly for a bounded evidence request if root-cause tracing still requires additional discovery.
 
 ---
 
@@ -155,9 +155,9 @@ Known exact path reads are not research.
 
 Agents may directly inspect files, diffs, artifacts, exact known paths, and evidence explicitly provided in their assigned context.
 
-If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, the agent must use `orchestrator-mediated-research`.
+If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, the agent must use `research-delegation` directly for a bounded evidence request.
 
-When used by a subagent, `orchestrator-mediated-research` must produce a structured `<needs_research>` XML handoff for the orchestrator to fulfill.
+Research delegation gathers evidence only. It does not let the debugger implement fixes, change gates, or take over final routing authority.
 
 Mandatory research triggers:
 - the agent would need to inspect more than 2 unprovided files to make the decision safely
@@ -166,20 +166,11 @@ Mandatory research triggers:
 - external library, framework, API, or version behavior affects the decision
 - PASS / APPROVED / READY / completion would rely on guessing
 
-Required handoff shape:
-
-```xml
-<needs_research>
-  <type>internal|external|both</type>
-  <question>[precise research question]</question>
-  <why_needed>[why this evidence is required to continue safely]</why_needed>
-  <current_blocker>[the judgment or action that cannot be completed without this evidence]</current_blocker>
-</needs_research>
-```
+Research requests must state the evidence type, precise question, why the evidence is needed, and the root-cause judgment blocked until it arrives.
 
 Use this boundary:
 - Known exact path or provided artifact -> direct read / inspect
-- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `<needs_research>`
+- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> use `research-delegation` directly with a bounded evidence request
 
 ---
 
@@ -249,7 +240,7 @@ Gather evidence from:
 
 Keep evidence separate from interpretation.
 
-If needed, request repository or external evidence through `orchestrator-mediated-research`.
+If needed, request repository or external evidence through `research-delegation`.
 
 ---
 
@@ -421,7 +412,7 @@ If debugging cannot narrow the problem sufficiently:
 - do not recommend speculative fixes
 - state what evidence is missing
 - return `needs-more-evidence`
-- ask the orchestrator to gather the missing evidence or decide the next route
+- use `research-delegation` for the bounded missing evidence or return a route recommendation for the workflow gatekeeper
 
 If debugging reveals that the issue is not an implementation problem:
 - route to `plan` or `spec` as appropriate

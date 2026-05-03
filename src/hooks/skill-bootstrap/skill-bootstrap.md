@@ -22,7 +22,7 @@ Failure recovery:
 - systematic-debugging
 
 Shared utility skills:
-- orchestrator-mediated-research
+- research-delegation
 - test-driven-development
 - todo-sync
 
@@ -35,7 +35,7 @@ If acting as orchestrator:
 
 - initialize or update todo state with `todo-sync` before meaningful workflow work
 - ask blocking user questions through the `question` tool
-- route all subagent research through `orchestrator-mediated-research`
+- supervise workflow research boundaries; subagents use `research-delegation` with `explorer` or `librarian` for bounded evidence needs
 - preserve reviewer context isolation
 - enforce all gates
 - never directly edit implementation code

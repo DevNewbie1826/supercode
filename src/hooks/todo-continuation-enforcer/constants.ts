@@ -20,7 +20,7 @@ Universal rules:
 - Mark todos complete only after verification.
 - Do not claim completion while todos remain pending, in-progress, or unverified.
 - If you think work is complete, skeptically re-check the todo list and verify each item.
-- Use \`orchestrator-mediated-research\` for missing evidence.
+- Use \`research-delegation\` for bounded missing evidence; subagents call \`explorer\` or \`librarian\` directly, while orchestrators supervise workflow research boundaries.
 - Use or request \`systematic-debugging\` for unclear failures.
 - Do not bypass workflow gates or safety rules just to clear todos.
 

@@ -165,7 +165,7 @@ They may receive:
 - approved plan
 - current worktree state
 - fresh verification output gathered during this skill
-- minimal repository or external evidence returned through `orchestrator-mediated-research`, if needed
+- minimal repository or external evidence returned through `research-delegation`, if needed
 
 They must not receive:
 - executor reasoning
@@ -184,7 +184,7 @@ They judge the current artifacts, not the effort spent producing them.
 
 Before dispatching `completion-verifier` or `final-reviewer`, the orchestrator should provide a final-review Evidence Packet when completion depends on repository inspection, call sites, related tests, external contracts, or version-specific behavior.
 
-Final-review agents should use this packet first and return `<needs_research>` if the verdict still requires additional discovery.
+Final-review agents should use this packet first and use `research-delegation` directly for a bounded evidence request if the verdict still requires additional discovery.
 
 ---
 
@@ -240,9 +240,9 @@ Known exact path reads are not research.
 
 Agents may directly inspect files, diffs, artifacts, exact known paths, and evidence explicitly provided in their assigned context.
 
-If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, the agent must use `orchestrator-mediated-research`.
+If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, the agent must use `research-delegation` directly for a bounded evidence request.
 
-When used by a subagent, `orchestrator-mediated-research` must produce a structured `<needs_research>` XML handoff for the orchestrator to fulfill.
+Research delegation gathers evidence only. It does not let verifier or reviewer agents change gates, final verdict rules, routing authority, or approved scope.
 
 Mandatory research triggers:
 - the agent would need to inspect more than 2 unprovided files to make the decision safely
@@ -251,20 +251,11 @@ Mandatory research triggers:
 - external library, framework, API, or version behavior affects the decision
 - PASS / APPROVED / READY / completion would rely on guessing
 
-Required handoff shape:
-
-```xml
-<needs_research>
-  <type>internal|external|both</type>
-  <question>[precise research question]</question>
-  <why_needed>[why this evidence is required to continue safely]</why_needed>
-  <current_blocker>[the judgment or action that cannot be completed without this evidence]</current_blocker>
-</needs_research>
-```
+Research requests must state the evidence type, precise question, why the evidence is needed, and the verdict or routing decision blocked until it arrives.
 
 Use this boundary:
 - Known exact path or provided artifact -> direct read / inspect
-- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `<needs_research>`
+- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> use `research-delegation` directly with a bounded evidence request
 
 ---
 
@@ -290,6 +281,20 @@ If verification fails or is incomplete:
 
 ---
 
+### Phase 1A: Product Completeness Check
+
+Run this check only when the approved spec or plan includes user-facing product, UI, or UX work.
+
+For those work items, fresh evidence must also cover:
+- the intended user-visible path or interaction
+- obvious empty, loading, error, and success states in scope
+- accessibility or interaction expectations explicitly required by the spec or plan
+- screenshots, browser checks, or equivalent UI evidence when the plan requires them
+
+Do not apply this gate to backend-only, tooling-only, docs-only, or internal refactor work unless the approved artifacts make product completeness part of scope.
+
+---
+
 ### Phase 2: Independent Final Review
 
 Dispatch `final-reviewer` with isolated context:
@@ -307,12 +312,25 @@ Dispatch `final-reviewer` with isolated context:
 - test / verification adequacy
 - critical leftovers
 - obvious regressions or incomplete artifacts
+- product completeness only for user-facing product, UI, or UX work
 
 `final-reviewer` must decide:
 - PASS
 - FAIL
 
 No other verdict is allowed.
+
+---
+
+## Final-Review Session Freshness Rule
+
+`completion-verifier` and `final-reviewer` must use fresh sessions by default for each final-review run.
+
+Do not reuse a verifier or final-reviewer session if it:
+- participated in execution, implementation, planning, or earlier task reviews
+- received executor reasoning, effort narrative, or stale completion claims as evidence
+- performed research or otherwise left the read-only verification/review role
+- handled a previous failed final-review run and cannot cleanly judge only the current artifacts and fresh evidence
 
 ---
 
