@@ -12,6 +12,8 @@ Its purpose is to ensure that production code is written only after a relevant t
 This is a supporting execution skill.
 It should be invoked by `executor` whenever behavior, production code, tests, bugs, regressions, or refactors are involved.
 
+Outcome contract: TDD is complete only when RED and GREEN evidence are both observed for the intended behavior, any refactor preserves GREEN, and the executor can report exact commands and results.
+
 ---
 
 ## Reference Documents
@@ -101,12 +103,14 @@ A good RED test:
 - demonstrates the desired API or outcome
 - prefers real code over mocks unless mocks are unavoidable
 - fails because the behavior is missing
+- fails for an assertion tied to user-visible, domain, or public behavior rather than incidental implementation shape
 
 Avoid:
 - vague names
 - broad multi-behavior tests
 - tests that mostly verify mock setup
 - tests that mirror the implementation instead of the requirement
+- tests added only to satisfy process while leaving the real behavior unprotected
 
 Rule of thumb:
 - if the test name contains “and,” consider splitting it.
@@ -285,9 +289,9 @@ Known exact path reads are not research.
 
 Agents may directly inspect files, diffs, artifacts, exact known paths, and evidence explicitly provided in their assigned context.
 
-If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, the agent must use `orchestrator-mediated-research`.
+If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, the agent must use `research-delegation` directly for a bounded evidence request.
 
-When used by a subagent, `orchestrator-mediated-research` must produce a structured `<needs_research>` XML handoff for the orchestrator to fulfill.
+Research delegation gathers evidence only. It does not relax TDD order, expand implementation scope, or change workflow gates.
 
 Mandatory research triggers:
 - the agent would need to inspect more than 2 unprovided files to make the decision safely
@@ -296,20 +300,11 @@ Mandatory research triggers:
 - external library, framework, API, or version behavior affects the decision
 - PASS / APPROVED / READY / completion would rely on guessing
 
-Required handoff shape:
-
-```xml
-<needs_research>
-  <type>internal|external|both</type>
-  <question>[precise research question]</question>
-  <why_needed>[why this evidence is required to continue safely]</why_needed>
-  <current_blocker>[the judgment or action that cannot be completed without this evidence]</current_blocker>
-</needs_research>
-```
+Research requests must state the evidence type, precise question, why the evidence is needed, and the TDD decision blocked until it arrives.
 
 Use this boundary:
 - Known exact path or provided artifact -> direct read / inspect
-- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `<needs_research>`
+- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> use `research-delegation` directly with a bounded evidence request
 
 ---
 
@@ -339,7 +334,7 @@ If you do not know how to test the behavior:
 - write the assertion first
 - design the API from the desired use
 - look for existing project test patterns
-- request orchestrator-mediated research if needed
+- use `research-delegation` directly for a bounded evidence request if needed
 
 If the test is too complicated:
 - the design may be too complicated

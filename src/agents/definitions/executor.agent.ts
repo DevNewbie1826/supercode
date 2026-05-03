@@ -22,6 +22,11 @@ export const executorAgent: AgentDefinition = {
       apply_patch: "deny",
       edit: "allow",
       todowrite: "allow",
+      task: {
+        "*": "deny",
+        explorer: "allow",
+        librarian: "allow",
+      },
     },
   },
 };

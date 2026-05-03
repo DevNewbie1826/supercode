@@ -7,6 +7,8 @@ description: Use when an approved spec exists for a unique work_id in the isolat
 
 The `plan` skill turns the approved spec into a hardened, execution-ready plan.
 
+Outcome contract: the stage is complete only when `docs/supercode/<work_id>/plan.md` gives `pre-execute-alignment` and `execute` concrete tasks, file targets, dependencies, and verification commands that can be followed without planner interpretation.
+
 This skill is the planning gear in the workflow.
 It is based on the same role split as crystallize:
 - `planner` writes
@@ -23,6 +25,7 @@ It must not:
 - implement code
 - compensate for weak specs by inventing missing meaning
 - split into multiple competing plan artifacts for the same work item
+- add speculative abstractions, dependencies, documentation work, or product polish that the approved spec does not justify
 
 ---
 
@@ -37,7 +40,7 @@ Responsibility split:
 ### planner
 - writes and revises the plan
 - may inspect repository context
-- may use `orchestrator-mediated-research`
+- may use `research-delegation`
 - may modify only the plan artifact
 
 ### plan-checker
@@ -118,6 +121,13 @@ Every task section must include:
 - dependency notes
 - parallel eligibility
 
+For user-facing product, UI, or UX work, task sections must also include executable integration and QA coverage for:
+- the user-visible path or interaction
+- relevant empty, loading, error, and success states when in scope
+- alignment with existing UI/product patterns
+
+Do not require UI/product completeness fields for internal, prompt, config-only, tooling-only, or backend-only work unless the approved spec includes them.
+
 ---
 
 ## Hard Rules
@@ -195,7 +205,7 @@ The planning Evidence Packet should include:
 - external constraints, if any
 - unresolved uncertainty
 
-Planner, checker, and challenger should use this packet before returning `<needs_research>`.
+Planner, checker, and challenger should use this packet before using `research-delegation` for bounded missing evidence.
 
 ---
 
@@ -211,10 +221,12 @@ Possible context sources:
 - project docs
 - external dependency behavior
 
-Use `orchestrator-mediated-research` whenever repository or external evidence is needed.
+Use `research-delegation` whenever repository or external evidence is needed.
 
 Do not gather context endlessly.
 Gather enough to produce a grounded plan.
+
+Stop context gathering when the evidence supports task boundaries, file targets, dependency order, and executable QA. If two focused research rounds do not resolve a planning blocker, route back to `spec` or record the unresolved risk instead of widening scope.
 
 ---
 
@@ -263,7 +275,7 @@ If any are missing in a planning-blocking way:
 ### Phase 2: Gather Planning Context
 Gather the minimum context required to avoid guessing.
 
-If needed, use `orchestrator-mediated-research`.
+If needed, use `research-delegation`.
 
 ### Phase 3: Planner Draft
 Dispatch `planner` with:
@@ -328,6 +340,18 @@ This skill does not create the worktree and does not implement the plan.
 
 ---
 
+## Reviewer Session Freshness Rule
+
+`plan-checker` and `plan-challenger` must use fresh review sessions by default for each independent review pass.
+
+Do not reuse a checker or challenger session if it:
+- helped write or revise the plan
+- received planner reasoning, revision narrative, or self-justification
+- reviewed a rejected revision and cannot cleanly judge the current plan artifact only
+- performed research or otherwise left the read-only reviewer role
+
+---
+
 ## Reviewer Isolation Rule
 
 `plan-checker` and `plan-challenger` must review from artifact-focused context only.
@@ -335,7 +359,7 @@ This skill does not create the worktree and does not implement the plan.
 They may receive:
 - approved spec
 - current plan artifact
-- minimal necessary repository or external evidence gathered through `orchestrator-mediated-research`
+- minimal necessary repository or external evidence gathered through `research-delegation`
 
 They must not receive:
 - planner reasoning chains
@@ -403,7 +427,7 @@ If planning repeatedly fails because the spec is too weak:
 - specify the exact missing or unstable inputs
 
 If planning fails because repository or dependency behavior is unclear:
-- use `orchestrator-mediated-research`
+- use `research-delegation`
 - gather the missing evidence
 - resume planning only after that evidence is available
 

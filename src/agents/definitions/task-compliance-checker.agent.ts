@@ -23,7 +23,11 @@ export const taskComplianceCheckerAgent: AgentDefinition = {
       edit: "deny",
       ast_grep_replace: "deny",
       lsp_rename: "deny",
-      task: "deny",
+      task: {
+        "*": "deny",
+        explorer: "allow",
+        librarian: "allow",
+      },
     },
   },
 };

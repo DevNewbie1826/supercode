@@ -24,6 +24,8 @@ Verify tests -> Present options -> Execute choice -> Clean up only when appropri
 
 This skill is owned by the `orchestrator`.
 
+Outcome contract: finish is complete only after final-review PASS, current tests, explicit user choice among the four allowed outcomes, the selected branch/worktree operation, and concise final-state reporting all succeed.
+
 ---
 
 ## Primary Agent
@@ -89,6 +91,7 @@ If final-review is missing or not PASS:
 Before presenting options, verify the current branch still passes tests.
 
 Use the project’s known verification command when available.
+If the final-review record or plan names a stricter final verification command, use that command instead of a smaller default test. Do not downgrade verification scope for speed.
 
 Examples:
 
@@ -185,6 +188,8 @@ If merged-result tests fail:
 - do not claim completion
 - stop for user direction or route back to debugging/execution as appropriate
 
+Merge precondition: the feature branch must be the reviewed branch, final-review PASS must still apply to it, and the base branch must be known before checkout or merge begins.
+
 ---
 
 ### Option 2: Push and Create PR
@@ -209,6 +214,8 @@ After PR creation:
 - keep the branch
 - keep the worktree
 - report PR result or URL if available
+
+PR precondition: final-review PASS and current tests must apply to the pushed branch, and the PR body must summarize the verified changes without claiming unverified scope.
 
 Report:
 

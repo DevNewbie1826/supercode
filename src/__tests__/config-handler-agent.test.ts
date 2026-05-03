@@ -372,9 +372,72 @@ describe("createConfigHandler remaining built-in agent bash-only alignment", () 
         edit: "deny",
         ast_grep_replace: "deny",
         lsp_rename: "deny",
-        task: "deny",
       })
     }
+  })
+})
+
+describe("createConfigHandler target non-research subagent bounded task permission emission", () => {
+  const targetAgentNames = [
+    "executor",
+    "planner",
+    "plan-checker",
+    "plan-challenger",
+    "code-quality-reviewer",
+    "code-spec-reviewer",
+    "spec-reviewer",
+    "completion-verifier",
+    "final-reviewer",
+    "systematic-debugger",
+    "task-compliance-checker",
+  ] as const
+
+  const expectedTaskPermission = {
+    "*": "deny",
+    explorer: "allow",
+    librarian: "allow",
+  }
+
+  for (const agentName of targetAgentNames) {
+    it(`emits bounded nested task permission for ${agentName}`, async () => {
+      const config: Record<string, unknown> = {}
+
+      await createConfigHandler("/test/directory")(config)
+
+      const permission = (config.agent as Record<string, Record<string, unknown>>)[agentName]?.permission as Record<string, unknown>
+
+      expect(permission.task).toEqual(expectedTaskPermission)
+    })
+  }
+
+  it("keeps explorer emitted task permission as deny", async () => {
+    const config: Record<string, unknown> = {}
+
+    await createConfigHandler("/test/directory")(config)
+
+    const explorerPermission = (config.agent as Record<string, Record<string, unknown>>).explorer?.permission as Record<string, unknown>
+
+    expect(explorerPermission.task).toBe("deny")
+  })
+
+  it("keeps librarian emitted task permission as deny", async () => {
+    const config: Record<string, unknown> = {}
+
+    await createConfigHandler("/test/directory")(config)
+
+    const librarianPermission = (config.agent as Record<string, Record<string, unknown>>).librarian?.permission as Record<string, unknown>
+
+    expect(librarianPermission.task).toBe("deny")
+  })
+
+  it("does not emit the target nested task pattern for orchestrator", async () => {
+    const config: Record<string, unknown> = {}
+
+    await createConfigHandler("/test/directory")(config)
+
+    const orchestratorPermission = (config.agent as Record<string, Record<string, unknown>>).orchestrator?.permission as Record<string, unknown>
+
+    expect(orchestratorPermission.task).not.toEqual(expectedTaskPermission)
   })
 })
 

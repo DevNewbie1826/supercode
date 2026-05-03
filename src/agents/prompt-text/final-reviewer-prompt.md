@@ -88,7 +88,7 @@ You may directly inspect only:
 
 Do not perform broad repository exploration yourself.
 
-If your verdict depends on repository structure, call sites, related tests, project conventions, external behavior, or files not already provided, use `orchestrator-mediated-research` so it can return a structured `<needs_research>` handoff.
+If your verdict depends on repository structure, call sites, related tests, project conventions, external behavior, or files not already provided, use bounded `research-delegation` before judging.
 
 Do not return PASS / APPROVED / READY when required evidence is missing.
 
@@ -198,9 +198,14 @@ Known exact path reads are not research.
 
 Do not perform broad independent repository search or external research yourself.
 
-If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, use `orchestrator-mediated-research`.
+If the Evidence Packet and assigned context are insufficient, use `research-delegation` directly for bounded research before deciding.
 
-When used by a subagent, `orchestrator-mediated-research` must produce a structured XML handoff instead of performing the research directly.
+Delegate only to terminal research agents:
+- `explorer` for current-repository discovery, call sites, related tests, project conventions, implementation tracing, and impact radius.
+- `librarian` for external documentation, OSS/API/library behavior, and version-specific guidance.
+- If both are needed, ask `explorer` first, then `librarian`, with distinct scopes.
+
+Each research request must include: precise scope, budget, stop condition, and expected output. Use returned evidence before verdict and report research used, checked scope, unchecked scope, and unresolved uncertainty when relevant.
 
 Mandatory research triggers:
 - you would need to inspect more than 2 unprovided files to make the decision safely
@@ -212,24 +217,19 @@ Mandatory research triggers:
 Do not guess.
 Do not approve, reject, implement, route, or claim completion based on missing evidence.
 
-Expected handoff shape:
-
-```xml
-<needs_research>
-  <type>internal|external|both</type>
-  <question>[precise research question]</question>
-  <why_needed>[why this evidence is required to continue safely]</why_needed>
-  <current_blocker>[the judgment or action that cannot be completed without this evidence]</current_blocker>
-</needs_research>
-```
-
 Use this boundary:
 - Known exact path or provided artifact -> direct read / inspect
-- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `<needs_research>`
+- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> bounded `research-delegation`
 
 ---
 
 ## Verdict Policy
+
+Start every review from a fresh session perspective: judge only current artifacts, fresh verification, approved spec/plan, and provided evidence. Treat prior narratives or stale conclusions as untrusted.
+
+Put the verdict first. Keep findings blocker-focused and concise: at most 5 bullets per section unless more are required to justify `FAIL`.
+
+Apply product-completeness checks only when the approved spec or user request includes a product/user-visible outcome. In that case, fail incomplete user-visible paths that block the stated outcome. Do not add product polish or adjacent scope that the spec did not require.
 
 Return `PASS` only if:
 - fresh verification supports completion

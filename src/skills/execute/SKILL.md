@@ -18,6 +18,8 @@ Its job is to:
 
 This skill is the execution engine of the workflow.
 
+Outcome contract: execution is successful only when each assigned task has artifact-backed completion evidence, required review gates have passed, verification has run, and the worktree is ready for an independent `final-review` without relying on executor narrative.
+
 ---
 
 ## Primary Agents
@@ -77,12 +79,15 @@ This skill must produce:
 - execution-level final verification result
 - a status suitable for handoff to `final-review`
 
+The executor completion report is an official evidence artifact for downstream reviewers. It must be concise, artifact-focused, and supported by changed paths, diagnostics status, and verification output rather than effort narrative.
+
 At minimum report:
 - completed tasks
 - changed files
 - verification run
 - LSP diagnostics status
 - whether execution-level final verification passed
+- research used and unresolved unchecked scope, if any
 - any remaining concerns worth surfacing
 
 ---
@@ -140,7 +145,7 @@ Reviewers must not receive executor narrative context.
 - relevant verification output
 - relevant LSP diagnostics summary
 - the minimum surrounding code context needed to judge compliance
-- minimal evidence returned through `orchestrator-mediated-research`, if required
+- minimal evidence returned through `research-delegation`, if required
 
 ### `code-quality-reviewer` may receive only:
 - approved spec
@@ -150,7 +155,7 @@ Reviewers must not receive executor narrative context.
 - relevant verification output
 - relevant LSP diagnostics summary
 - the minimum surrounding code context needed to judge quality
-- minimal evidence returned through `orchestrator-mediated-research`, if required
+- minimal evidence returned through `research-delegation`, if required
 
 ### Reviewers must not receive:
 - executor reasoning
@@ -178,7 +183,7 @@ The task Evidence Packet should include:
 - impact radius
 - external behavior, if relevant
 
-The executor should use this packet first and return `<needs_research>` if broader discovery is still required.
+The executor should use this packet first and use `research-delegation` directly for a bounded evidence request if broader discovery is still required.
 
 ---
 
@@ -194,7 +199,7 @@ The executor may receive:
 - dependency context
 - verification expectations
 - conflict warnings
-- research results returned through `orchestrator-mediated-research`
+- research results returned through `research-delegation`
 - relevant prior failure findings for the same task
 - review findings that must be addressed
 
@@ -254,6 +259,20 @@ This requirement is intended to catch obvious syntax, type, import, and symbol e
 
 ---
 
+## Conditional Product-Completeness Rule
+
+For user-facing product, UI, or UX tasks, the executor must implement the product-complete outcome described by the approved spec and plan.
+
+Do not satisfy such tasks with bare text, placeholder UI, disconnected components, or function presence when the approved artifacts imply an integrated user-visible result.
+
+For those tasks, preserve scope while checking the planned user-visible path, relevant states, and existing UI/product patterns.
+
+Do not apply this rule to internal, prompt, config-only, tooling-only, or backend-only work unless the approved spec or plan makes product completeness part of scope.
+
+This rule does not weaken TDD, AST/LSP, review, or verification requirements.
+
+---
+
 ## Required Loop
 
 Every task must pass this exact loop:
@@ -289,6 +308,18 @@ Fresh executor replacement is an escalation tool, not the default behavior.
 
 ---
 
+## Reviewer Session Freshness Rule
+
+`code-spec-reviewer` and `code-quality-reviewer` must use fresh reviewer sessions by default for each task review pass.
+
+Do not reuse a reviewer session if it:
+- received executor reasoning, effort narrative, trial-and-error history, or self-justification
+- reviewed a prior rejected attempt and cannot cleanly judge the current artifact only
+- proposed or performed implementation changes
+- performed research or otherwise left the read-only reviewer role
+
+---
+
 ## Hard Rules
 
 1. Only `executor` may modify code.
@@ -303,7 +334,7 @@ Fresh executor replacement is an escalation tool, not the default behavior.
 10. Never let reviewers modify files.
 11. Never bypass the aligned execution batches.
 12. If a bug, regression, failing test, or unexpected behavior appears, route through `systematic-debugging` before attempting a fix.
-13. Known exact paths may be read directly; if additional discovery or external reference evidence is needed, route it through `orchestrator-mediated-research`.
+13. Known exact paths may be read directly; if additional discovery or external reference evidence is needed, route it through `research-delegation`.
 14. Do not begin execution in the main working tree.
 15. Require the isolated worktree prepared by `worktree`.
 16. Respect the approved spec and approved plan. Do not silently expand scope.
@@ -348,7 +379,7 @@ This skill must integrate these supporting skills:
 - `systematic-debugging`
   - required before proposing or attempting fixes for bugs, failed tests, regressions, or unexpected behavior discovered during execution
 
-- `orchestrator-mediated-research`
+- `research-delegation`
   - required whenever repository or external evidence is needed
 
 These skills constrain execution.
@@ -510,9 +541,9 @@ Known exact path reads are not research.
 
 Agents may directly inspect files, diffs, artifacts, exact known paths, and evidence explicitly provided in their assigned context.
 
-If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, the agent must use `orchestrator-mediated-research`.
+If the Evidence Packet and assigned context are insufficient, and additional repository discovery, cross-file investigation, implementation tracing, project convention discovery, call-site discovery, related-test discovery, impact-radius discovery, or external reference evidence is required, the agent must use `research-delegation` directly for a bounded evidence request.
 
-When used by a subagent, `orchestrator-mediated-research` must produce a structured `<needs_research>` XML handoff for the orchestrator to fulfill.
+Research delegation gathers evidence only. It does not let executors change batching, gates, final routing, or approved scope.
 
 Mandatory research triggers:
 - the agent would need to inspect more than 2 unprovided files to make the decision safely
@@ -521,20 +552,11 @@ Mandatory research triggers:
 - external library, framework, API, or version behavior affects the decision
 - PASS / APPROVED / READY / completion would rely on guessing
 
-Required handoff shape:
-
-```xml
-<needs_research>
-  <type>internal|external|both</type>
-  <question>[precise research question]</question>
-  <why_needed>[why this evidence is required to continue safely]</why_needed>
-  <current_blocker>[the judgment or action that cannot be completed without this evidence]</current_blocker>
-</needs_research>
-```
+Research requests must state the evidence type, precise question, why the evidence is needed, and the judgment or action blocked until it arrives.
 
 Use this boundary:
 - Known exact path or provided artifact -> direct read / inspect
-- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> `<needs_research>`
+- Unknown scope, broad discovery, implementation tracing, project convention discovery, or external evidence -> use `research-delegation` directly with a bounded evidence request
 
 ---
 

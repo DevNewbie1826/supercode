@@ -100,3 +100,56 @@ describe("builtin agent definitions", () => {
     expect(agentsWithBashDeny).toEqual([])
   })
 })
+
+describe("target non-research subagent bounded task permission policy", () => {
+  const targetAgentNames = [
+    "executor",
+    "planner",
+    "plan-checker",
+    "plan-challenger",
+    "code-quality-reviewer",
+    "code-spec-reviewer",
+    "spec-reviewer",
+    "completion-verifier",
+    "final-reviewer",
+    "systematic-debugger",
+    "task-compliance-checker",
+  ] as const
+
+  const expectedTaskPermission = {
+    "*": "deny",
+    explorer: "allow",
+    librarian: "allow",
+  }
+
+  for (const agentName of targetAgentNames) {
+    it(`gives ${agentName} a bounded nested task permission allowing only explorer and librarian`, () => {
+      const agent = getBuiltinAgentByName(agentName)
+      const permission = agent.defaults?.permission as Record<string, unknown>
+
+      expect(permission.task).toEqual(expectedTaskPermission)
+    })
+  }
+
+  it("keeps explorer as a terminal research agent with task deny", () => {
+    const explorer = getBuiltinAgentByName("explorer")
+    const permission = explorer.defaults?.permission as Record<string, unknown>
+
+    expect(permission.task).toBe("deny")
+  })
+
+  it("keeps librarian as a terminal research agent with task deny", () => {
+    const librarian = getBuiltinAgentByName("librarian")
+    const permission = librarian.defaults?.permission as Record<string, unknown>
+
+    expect(permission.task).toBe("deny")
+  })
+
+  it("does not assign the target nested task pattern to orchestrator", () => {
+    const orchestrator = getBuiltinAgentByName("orchestrator")
+    const permission = orchestrator.defaults?.permission as Record<string, unknown>
+
+    // orchestrator must NOT receive the bounded nested task permission
+    expect(permission.task).not.toEqual(expectedTaskPermission)
+  })
+})
