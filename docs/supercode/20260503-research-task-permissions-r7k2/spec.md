@@ -19,7 +19,8 @@ This includes:
 7. Adding product-completeness guardrails so user-facing work is not satisfied by bare text, placeholder UI, or literal-only implementation when a more integrated product outcome is implied.
 8. Adding fresh-session rules for reviewer, checker, verifier, and final-review agents so independent artifact judgment is not polluted by prior context.
 9. Using OMO prompt patterns as explicit reference material when Supercode agents face similar situations, while adapting them to Supercode's workflow and authority model instead of copying them wholesale.
-10. Preserving the existing Supercode stage gates and review discipline.
+10. Applying the same prompt-hardening principles to the skill documents themselves, not only to agent prompts, so every workflow stage has clearer outcomes, stop rules, handoff contracts, verification gates, and anti-slop boundaries.
+11. Preserving the existing Supercode stage gates and review discipline.
 
 # Current State
 
@@ -56,6 +57,7 @@ Prompt-quality issues identified from prior review:
 - `executor` can better define its completion report as an evidence artifact for downstream review.
 - Workflow skill prompts reference `orchestrator-mediated-research` and need to be realigned to `research-delegation`.
 - Orchestrator prompt should preserve gatekeeping while no longer acting as the default research broker.
+- Existing skill documents are strong on stage order but can be made more execution-safe by sharpening outcome-first framing, stop conditions, completion gates, handoff payloads, verification scopes, product-completeness triggers, and anti-AI-slop guidance.
 - Current prompts do not sufficiently force spec/planning/execution/review to identify product-facing completeness needs when a user asks for a feature. This can lead to literal-only outputs, such as placing unintegrated text on a webpage instead of delivering a coherent UI feature.
 - Reviewer/checker/verifier agents may sometimes be reused across judgments, which can weaken context isolation by carrying prior findings, executor narratives, or stale assumptions into what should be a fresh artifact-focused judgment.
 
@@ -343,6 +345,36 @@ Executor and debugger continuity remains allowed where useful:
 - Preserve the orchestrator's role as workflow gatekeeper, not research broker.
 - Update workflow skill prompts for stronger clarity where they are currently vague about evidence, verification scope, or handoff expectations.
 
+## Full skill prompt hardening
+
+Apply the same OMO/OpenAI/context-engineering improvements to skill documents as first-class workflow prompts. This is not a stage redesign; it is a clarification pass that makes the existing stages easier to execute correctly.
+
+Required skill targets and minimum improvements:
+
+| Skill | Required improvements | Must preserve |
+|---|---|---|
+| `spec/SKILL.md` | Outcome-first planning-readiness contract; product-facing clarification trigger; better stop rules for clarification/research loops; anti-literal-request and anti-scope-inflation guidance; explicit handoff evidence expectations. | Spec approval gate, one-question-at-a-time clarification, work_id artifact path, spec-reviewer gate. |
+| `plan/SKILL.md` | Executable QA standard; anti-AI-slop planning guardrails; product-completeness planning only for user-facing work; stronger stop rules for planning research and revision loops; clearer plan handoff contract. | Planner/checker/challenger split, plan-checker approval gate, no implementation. |
+| `pre-execute-alignment/SKILL.md` | Outcome-first alignment package; stricter task-readiness and verification-lock criteria; conservative parallelism stop rules; explicit fresh checker expectations. | No implementation, dependency/conflict batching rules, route back to plan when blocked. |
+| `execute/SKILL.md` | Completion report as official evidence artifact; direct bounded research-delegation rules; product-completeness execution guardrail; explicit final execution gate; clearer failure/debug stop conditions. | Executor-only write authority, TDD, AST/LSP, task-level spec/quality review loop. |
+| `final-review/SKILL.md` | Fresh verifier/reviewer session requirements; tests-pass-is-not-enough wording; stronger evidence completeness criteria; product-facing final review checks where applicable; concise PASS/FAIL record contract. | Binary final verdict, saved `final-review.md`, no code modification, finish only after PASS. |
+| `systematic-debugging/SKILL.md` | Root-cause confidence/evidence standard; stop rules for investigation; direct research-delegation for tracing; output contract for routing recommendation; no-fix authority boundary. | Debugger read-only role and routing back to the appropriate stage. |
+| `finish/SKILL.md` | Clarify final test scope and PR/merge preconditions; keep exactly four options; add concise final-state reporting contract. | No auto-merge/PR/discard, typed discard confirmation, worktree cleanup rules. |
+| `worktree/SKILL.md` | Clarify baseline verification evidence, degraded-baseline acceptance wording, and setup stop conditions. | `.worktrees/<work_id>/` convention, ignore safety, baseline before planning. |
+| `test-driven-development/SKILL.md` | Sharpen RED/GREEN evidence expectations, anti-test-slop checks, and research-delegation wording when tests require discovery. | No production code before failing test for behavior-changing work. |
+| `todo-sync/SKILL.md` | Keep minimal; only clarify terminal completion and stale todo prevention if needed. | Simple todo synchronization role. |
+| `playwright-cli/SKILL.md` | Keep mostly unchanged unless product-completeness verification wording is clearly useful for UI flows. | Browser automation scope and safety. |
+
+Skill hardening acceptance criteria:
+
+- Each changed skill starts or quickly states its concrete outcome and completion gate.
+- Each changed skill says when to stop, when to route backward, and what evidence is required before proceeding.
+- Each changed skill has a clear handoff/output contract for the next stage or caller.
+- Skill text does not create new public workflow stages, remove approval gates, or give write authority to read-only roles.
+- Product-completeness requirements remain conditional on user-facing/product/UI/UX work.
+- Research guidance uses `research-delegation` and direct bounded `explorer`/`librarian` usage; it does not reintroduce orchestrator research brokering.
+- OMO patterns are used as design references only when they clarify Supercode behavior.
+
 ## Tests and validation
 
 - Add/update tests proving the new default task permission policy.
@@ -470,6 +502,7 @@ The detailed prompt implementation may tune language per agent, but the intended
 - A new `research-delegation` skill exists and is referenced by relevant non-research subagent prompts and workflow skill prompts.
 - Prompt updates preserve existing Supercode roles, gates, and authority boundaries.
 - Relevant agent and skill prompts are hardened using the agreed prompt-quality principles: outcome-first framing, success criteria, constraints, bounded research/tool rules, stop conditions, evidence-based completion, context isolation, concise output contracts, QA executability, and anti-AI-slop guardrails.
+- Skill documents themselves are hardened according to the full skill prompt hardening table, with outcome-first stage contracts, stop rules, evidence/handoff standards, product-completeness conditionals, fresh review guidance where relevant, and OMO-adapted anti-slop checks.
 - `explorer` and `librarian` include clearer retrieval budgets, stop rules, evidence formats, and recursive-delegation prohibition.
 - Reviewer/checker/verifier prompts include clearer blocker-focused review posture, output limits, and evidence requirements without weakening their read-only status.
 - Planner/plan-checker prompts make verification expectations more executable and reduce vague manual-test language.

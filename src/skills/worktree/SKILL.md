@@ -11,6 +11,8 @@ It exists to ensure that all downstream work happens in a clean, separate worksp
 
 This skill is owned by the `orchestrator`.
 
+Outcome contract: the stage is successful only when a `.worktrees/<work_id>/` workspace exists, ignore safety is verified, setup has been attempted or explicitly skipped, baseline verification evidence is recorded, and the workspace is classified `ready` or explicitly accepted as a degraded baseline.
+
 It should run immediately after `spec` is approved and committed, and before `plan` begins. Its behavior is based primarily on easycode’s stricter local `.worktrees/` convention and safety-first setup flow, with the useful baseline-verification discipline also seen in superpowers. :contentReference[oaicite:0]{index=0}
 
 ---
@@ -208,6 +210,8 @@ If baseline verification fails:
 - classify the worktree as `blocked`
 - do not silently continue
 - let the orchestrator decide whether to investigate first or explicitly proceed with a documented degraded baseline
+
+A degraded baseline may be accepted only when the failing baseline is documented before planning, the failure is unrelated to the approved work, and downstream verification expectations record the caveat. Otherwise route to investigation before `plan`.
 
 If baseline verification passes:
 - classify the worktree as `ready`

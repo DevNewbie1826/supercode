@@ -18,6 +18,8 @@ Its job is to:
 This skill is a failure-recovery skill.
 It is not part of the normal happy path.
 
+Outcome contract: debugging is successful only when the workflow has an evidence-backed routing recommendation or a precise statement of the missing evidence that prevents safe routing.
+
 ---
 
 ## Primary Agent
@@ -116,6 +118,8 @@ This skill must produce a debugging result containing:
 - routing recommendation
 
 The output does not need to be saved as a workflow artifact unless the system chooses to persist it, but it must be structured enough for the orchestrator to route safely.
+
+Root-cause confidence must be evidence-based. A recommended fix or route is acceptable only when the narrowed causal path explains the observed failure, accounts for rejected alternatives, and identifies the next executor or workflow action without speculation.
 
 ---
 
@@ -332,6 +336,8 @@ The result must be narrow enough that `execute` can resume with a concrete targe
 If the root cause is still unclear:
 - say exactly what evidence is missing
 - do not recommend speculative code changes
+
+Stop investigation when the next missing fact requires broader repository tracing or external semantics; use `research-delegation` for that bounded evidence rather than widening the debugger's own search indefinitely.
 
 ---
 

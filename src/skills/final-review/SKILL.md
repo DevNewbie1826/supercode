@@ -23,6 +23,8 @@ Its job is to:
 
 This skill is the final judgment gate before `finish`.
 
+Outcome contract: final review passes only when a fresh verifier and fresh final reviewer can support PASS from current artifacts, current verification evidence, and the approved spec/plan; passing tests alone are necessary evidence when required, but never sufficient by themselves.
+
 ---
 
 ## Primary Agents
@@ -153,6 +155,7 @@ Do not use a shared static review path.
 8. Do not rely on verbal summaries when the spec, plan, and worktree can be inspected directly.
 9. Do not pass simply because execution agents said the work is done.
 10. Do not route failures to the wrong layer just to avoid replanning.
+11. Do not issue PASS based only on a green test command when scope completion, artifact inspection, or product-facing acceptance criteria remain unverified.
 
 ---
 
@@ -319,6 +322,8 @@ Dispatch `final-reviewer` with isolated context:
 - FAIL
 
 No other verdict is allowed.
+
+The PASS/FAIL record must be concise and evidence-backed: list the commands or inspections that support the verdict, explicitly name unchecked scope, and avoid repeating executor explanations.
 
 ---
 

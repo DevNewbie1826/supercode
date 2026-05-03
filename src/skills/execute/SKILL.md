@@ -18,6 +18,8 @@ Its job is to:
 
 This skill is the execution engine of the workflow.
 
+Outcome contract: execution is successful only when each assigned task has artifact-backed completion evidence, required review gates have passed, verification has run, and the worktree is ready for an independent `final-review` without relying on executor narrative.
+
 ---
 
 ## Primary Agents
@@ -77,12 +79,15 @@ This skill must produce:
 - execution-level final verification result
 - a status suitable for handoff to `final-review`
 
+The executor completion report is an official evidence artifact for downstream reviewers. It must be concise, artifact-focused, and supported by changed paths, diagnostics status, and verification output rather than effort narrative.
+
 At minimum report:
 - completed tasks
 - changed files
 - verification run
 - LSP diagnostics status
 - whether execution-level final verification passed
+- research used and unresolved unchecked scope, if any
 - any remaining concerns worth surfacing
 
 ---

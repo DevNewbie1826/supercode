@@ -7,6 +7,8 @@ description: Use when a development request must be clarified, researched, and c
 
 The `spec` skill turns an initial development request into a reviewed, approved, planning-ready specification.
 
+Outcome contract: the stage is successful only when the approved spec artifact contains enough evidence, scope boundaries, constraints, and success criteria for `plan` to proceed without guessing.
+
 This skill is the first public workflow stage.
 It must complete before `worktree`, `plan`, or any implementation begins.
 
@@ -24,6 +26,7 @@ It must not:
 - create an implementation plan
 - create execution tasks
 - proceed to `worktree` before approval and commit
+- satisfy product-facing requests with literal wording only when the user's intent implies a coherent user-visible outcome
 
 ---
 
@@ -231,6 +234,8 @@ If clarification is not progressing:
    - gather better evidence
    - surface the contradiction directly
 5. Continue the loop.
+
+Stop and route back to the user instead of drafting if the remaining ambiguity affects scope, user-visible acceptance, product-completeness expectations, or planning safety.
 
 If temporary assumptions are necessary, they must be:
 - clearly labeled

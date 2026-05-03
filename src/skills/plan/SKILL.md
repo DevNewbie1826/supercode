@@ -7,6 +7,8 @@ description: Use when an approved spec exists for a unique work_id in the isolat
 
 The `plan` skill turns the approved spec into a hardened, execution-ready plan.
 
+Outcome contract: the stage is complete only when `docs/supercode/<work_id>/plan.md` gives `pre-execute-alignment` and `execute` concrete tasks, file targets, dependencies, and verification commands that can be followed without planner interpretation.
+
 This skill is the planning gear in the workflow.
 It is based on the same role split as crystallize:
 - `planner` writes
@@ -23,6 +25,7 @@ It must not:
 - implement code
 - compensate for weak specs by inventing missing meaning
 - split into multiple competing plan artifacts for the same work item
+- add speculative abstractions, dependencies, documentation work, or product polish that the approved spec does not justify
 
 ---
 
@@ -222,6 +225,8 @@ Use `research-delegation` whenever repository or external evidence is needed.
 
 Do not gather context endlessly.
 Gather enough to produce a grounded plan.
+
+Stop context gathering when the evidence supports task boundaries, file targets, dependency order, and executable QA. If two focused research rounds do not resolve a planning blocker, route back to `spec` or record the unresolved risk instead of widening scope.
 
 ---
 

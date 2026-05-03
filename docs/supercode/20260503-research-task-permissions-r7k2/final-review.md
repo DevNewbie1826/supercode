@@ -28,6 +28,11 @@ PASS
 - `orchestrator` remains excluded from the target nested task pattern.
 - Product-completeness guardrails are conditional on user-facing/product/UI/UX work.
 - Fresh-session guardrails cover reviewer/checker/verifier/final-review prompts.
+- Full workflow skill prompt hardening was added and verified after the original PR creation:
+  - required skill prompts now include clearer outcome/completion contracts, stop/route-back rules, evidence and handoff expectations, conditional product-completeness guidance, and direct bounded `research-delegation` language;
+  - `finish/SKILL.md` still preserves exactly four finish options and typed `discard` confirmation semantics;
+  - public gate order remains `spec → worktree → plan → pre-execute-alignment → execute → final-review → finish`.
+- Skill hardening semantic audit saved at `docs/supercode/20260503-research-task-permissions-r7k2/skill-hardening-audit.md`.
 
 # File / Artifact Inspection Summary
 
@@ -38,6 +43,7 @@ Reviewed evidence covers:
 - skill replacement and workflow skill prompt updates;
 - README skill inventory updates;
 - prompt and skill regression tests;
+- skill hardening semantic audit;
 - fresh verification output.
 
 # Scope Completion Assessment
@@ -50,6 +56,7 @@ The implementation satisfies the approved scope:
 - research agents remain terminal;
 - agent and skill prompts hardened using bounded OMO/OpenAI/context-engineering principles;
 - product-completeness and fresh-session guardrails added;
+- full skill prompt hardening completed for required workflow skills;
 - tests and docs updated.
 
 # Success Criteria Assessment
@@ -70,4 +77,4 @@ Proceed to finish.
 
 # Final Assessment
 
-Final review passed. The work is ready for finish and PR creation.
+Final review passed after the additional full skill prompt hardening pass. The work is ready for finish and PR update.

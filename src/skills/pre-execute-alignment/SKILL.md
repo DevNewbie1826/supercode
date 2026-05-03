@@ -7,6 +7,8 @@ description: Use when an approved plan exists and the workflow must lock executi
 
 The `pre-execute-alignment` skill turns an approved plan into an execution-ready alignment package.
 
+Outcome contract: the alignment package is successful only when `execute` can start with locked task order, safe batching, dependency constraints, conflict warnings, and per-task verification evidence requirements.
+
 Its job is to:
 - validate that each planned task is clear enough to execute
 - confirm dependency order
@@ -261,6 +263,8 @@ Do not use it to:
 - substitute for orchestrator judgment
 
 The orchestrator should treat repeated or serious `task-compliance-checker` objections as blockers.
+
+Checker findings are readiness evidence, not implementation advice. If a fresh checker cannot judge a task from the plan, provided artifacts, and bounded evidence, alignment must stop and route back to `plan` rather than ask `execute` to interpret the gap.
 
 ---
 

@@ -12,6 +12,8 @@ Its purpose is to ensure that production code is written only after a relevant t
 This is a supporting execution skill.
 It should be invoked by `executor` whenever behavior, production code, tests, bugs, regressions, or refactors are involved.
 
+Outcome contract: TDD is complete only when RED and GREEN evidence are both observed for the intended behavior, any refactor preserves GREEN, and the executor can report exact commands and results.
+
 ---
 
 ## Reference Documents
@@ -101,12 +103,14 @@ A good RED test:
 - demonstrates the desired API or outcome
 - prefers real code over mocks unless mocks are unavoidable
 - fails because the behavior is missing
+- fails for an assertion tied to user-visible, domain, or public behavior rather than incidental implementation shape
 
 Avoid:
 - vague names
 - broad multi-behavior tests
 - tests that mostly verify mock setup
 - tests that mirror the implementation instead of the requirement
+- tests added only to satisfy process while leaving the real behavior unprotected
 
 Rule of thumb:
 - if the test name contains “and,” consider splitting it.
