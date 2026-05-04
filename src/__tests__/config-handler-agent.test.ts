@@ -297,6 +297,7 @@ describe("createConfigHandler explorer permission emission", () => {
 
     // nested read rules emitted exactly
     expect(explorerPermission.read).toEqual({
+      "*": "allow",
       "*.env": "deny",
       "*.env.*": "deny",
       "*.env.example": "allow",
@@ -333,6 +334,7 @@ describe("createConfigHandler librarian permission emission", () => {
 
     // nested read rules emitted exactly
     expect(librarianPermission.read).toEqual({
+      "*": "allow",
       "*.env": "deny",
       "*.env.*": "deny",
       "*.env.example": "allow",
