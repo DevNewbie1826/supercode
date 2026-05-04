@@ -64,7 +64,7 @@ QUESTION: The precise question to answer.
 WHY NEEDED: Why the evidence is required before continuing safely.
 SCOPE: The allowed repository area, artifact set, library, API, or documentation boundary.
 REQUIRED SOURCES: Required paths, source categories, official docs, or source quality expectations.
-BUDGET: Maximum files, searches, references, time, or result count.
+BUDGET: Maximum files (max_files), searches (max_searches), sources/references (max_sources), tool calls (max_calls), time, or result count.
 STOP CONDITION: The evidence threshold or blocker condition that ends the research.
 EXPECTED OUTPUT: The exact evidence format needed by the caller.
 ```
@@ -73,6 +73,8 @@ Delegation requests must be narrow enough that the agent can answer without gues
 
 ## Budget Rules
 
+Budgets are **binding maximums**, not advisory, not optional, not suggestions, and not soft guidance. A research agent must never exceed its caller-provided budget and must not treat the budget as expandable after the fact.
+
 - Set an explicit budget before delegation begins.
 - Prefer the smallest budget that can answer the question safely.
 - Start with one focused research call.
@@ -80,16 +82,28 @@ Delegation requests must be narrow enough that the agent can answer without gues
 - Do not ask duplicate questions across agents or repeated rounds.
 - For internal research, budget by file count, directory scope, search count, or maximum call-site samples.
 - For external research, budget by official source priority, maximum documents, version scope, or reference count.
+- **Stop before exceeding the budget.** If the budget is insufficient to complete the research, the agent must stop before exceeding it and report checked scope, unchecked scope, unresolved uncertainty, and additional budget needed.
 - Do not expand the budget silently. If the budget is exhausted before the stop condition is met, return unresolved uncertainty.
 - Do not ask a research agent to perform open-ended exploration when a narrower contract can answer the decision.
 - Stop after two unproductive rounds.
 - Stop when evidence is sufficient for the task-scoped decision.
+- Any agent-specific instruction to parallelize, broaden discovery, or satisfy completeness applies only within TASK, SCOPE, REQUIRED SOURCES, BUDGET, and STOP CONDITION. Budget overrides completeness when they conflict.
 
 Suggested defaults when no stricter task budget is provided:
 
 - internal: up to 5 files or 3 focused searches
 - external: up to 3 authoritative sources, preferring official documentation
 - combined: internal defaults first, then external defaults narrowed by the internal result
+
+### Budget Outcomes
+
+Every research result must report one of three outcomes:
+
+1. **Within-budget success**: The question was answered within the budget. `budget_followed: true`. `if_exceeded: null`. `additional_budget_needed: null`.
+2. **Insufficient-budget stop**: The budget was not enough to fully answer the question, but the agent stopped before exceeding it. `budget_followed: true`. The agent reports checked scope, unchecked scope, unresolved uncertainty, and `additional_budget_needed` with a concrete estimate.
+3. **Scope blocker**: The requested SCOPE was discovered to be wrong, unsafe, or inaccessible. The agent reports the blocker and returns to the caller for a new delegation contract.
+
+If an agent accidentally exceeds its budget despite the binding rule, it must report the violation explicitly: `budget_followed: false`, explain `if_exceeded` what exceeded the budget and why, and state whether the evidence should still be trusted despite the violation.
 
 ## Stop Rules
 
@@ -132,8 +146,15 @@ Research results should be concise and source-focused:
   - [what was not checked]
 - unresolved_uncertainty:
   - [remaining uncertainty or None.]
-- budget_used: [files/searches/sources/time used]
 - stop_reason: [why research stopped]
+
+### Budget
+- calls_used: [number of tool calls consumed]
+- files_or_sources_used: [number of files or sources read]
+- budget_limit: [the caller-provided budget maximum]
+- budget_followed: true | false
+- if_exceeded: [null, or explanation of what exceeded the budget and why]
+- additional_budget_needed: [null, or concrete estimate of extra budget required]
 ```
 
 The caller must use the result only for the task or decision named in the contract.
