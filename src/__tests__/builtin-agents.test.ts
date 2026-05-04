@@ -122,6 +122,49 @@ describe("builtin agent definitions", () => {
     expect(Object.entries(permission.read as Record<string, string>)).toEqual(expectedReadEntries)
   })
 
+  it("gives executor external_directory allow and explicit .env-protected read rules with preserved edit/delegation policy", () => {
+    const executor = getBuiltinAgentByName("executor")
+    const permission = executor.defaults?.permission as Record<string, unknown>
+
+    // external_directory must be allow
+    expect(permission.external_directory).toBe("allow")
+
+    // nested read rules with exact ordered entries
+    expect(Object.entries(permission.read as Record<string, string>)).toEqual(expectedReadEntries)
+
+    // preserved existing permissions
+    expect(permission.edit).toBe("allow")
+    expect(permission.apply_patch).toBe("deny")
+    expect(permission.todowrite).toBe("allow")
+    expect(permission.task).toEqual({
+      "*": "deny",
+      explorer: "allow",
+      librarian: "allow",
+    })
+
+    // bash must be absent
+    expect(permission).not.toHaveProperty("bash")
+
+    // exact top-level permission key set — no extra permissions
+    expect(Object.keys(permission).sort()).toEqual([
+      "apply_patch",
+      "edit",
+      "external_directory",
+      "read",
+      "task",
+      "todowrite",
+    ])
+  })
+
+  it("generated built-in config preserves executor read-entry order via buildBuiltinAgentEntries", () => {
+    const registry = createBuiltinAgentRegistry()
+    const generated = buildBuiltinAgentEntries({}, registry)
+    const executorConfig = generated["executor"] as Record<string, unknown>
+    const permission = executorConfig.permission as Record<string, unknown>
+
+    expect(Object.entries(permission.read as Record<string, string>)).toEqual(expectedReadEntries)
+  })
+
   it("no built-in agent default permission object contains explicit bash deny", () => {
     const registry = createBuiltinAgentRegistry()
 

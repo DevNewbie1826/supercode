@@ -27,6 +27,13 @@ export const executorAgent: AgentDefinition = {
         explorer: "allow",
         librarian: "allow",
       },
+      external_directory: "allow",
+      read: {
+        "*": "allow",
+        "*.env": "deny",
+        "*.env.*": "deny",
+        "*.env.example": "allow",
+      },
     },
   },
 };
