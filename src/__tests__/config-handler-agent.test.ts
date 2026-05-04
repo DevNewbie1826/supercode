@@ -297,10 +297,57 @@ describe("createConfigHandler explorer permission emission", () => {
 
     // nested read rules emitted exactly
     expect(explorerPermission.read).toEqual({
+      "*": "allow",
       "*.env": "deny",
       "*.env.*": "deny",
       "*.env.example": "allow",
     })
+  })
+})
+
+describe("createConfigHandler executor permission emission", () => {
+  const executorExpectedTopLevelKeys = [
+    "apply_patch",
+    "edit",
+    "external_directory",
+    "read",
+    "task",
+    "todowrite",
+  ]
+
+  it("emits the approved executor permission state with external_directory, nested read rules, and preserved edit/delegation policy", async () => {
+    const config: Record<string, unknown> = {}
+
+    await createConfigHandler("/test/directory")(config)
+
+    const executorPermission = (config.agent as Record<string, Record<string, unknown>>).executor?.permission as Record<string, unknown>
+
+    // external_directory must be allow
+    expect(executorPermission.external_directory).toBe("allow")
+
+    // nested read rules emitted exactly with ordered entries
+    expect(executorPermission.read).toEqual({
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow",
+    })
+
+    // preserved existing permissions
+    expect(executorPermission.edit).toBe("allow")
+    expect(executorPermission.apply_patch).toBe("deny")
+    expect(executorPermission.todowrite).toBe("allow")
+    expect(executorPermission.task).toEqual({
+      "*": "deny",
+      explorer: "allow",
+      librarian: "allow",
+    })
+
+    // bash must be absent
+    expect(executorPermission).not.toHaveProperty("bash")
+
+    // exact top-level permission key set — no extra permissions
+    expect(Object.keys(executorPermission).sort()).toEqual([...executorExpectedTopLevelKeys].sort())
   })
 })
 
@@ -333,6 +380,7 @@ describe("createConfigHandler librarian permission emission", () => {
 
     // nested read rules emitted exactly
     expect(librarianPermission.read).toEqual({
+      "*": "allow",
       "*.env": "deny",
       "*.env.*": "deny",
       "*.env.example": "allow",

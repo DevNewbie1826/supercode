@@ -29,6 +29,7 @@ const librarianAgent: AgentDefinition = {
       webfetch: "allow",
       doom_loop: "deny",
       read: {
+        "*": "allow",
         "*.env": "deny",
         "*.env.*": "deny",
         "*.env.example": "allow",
