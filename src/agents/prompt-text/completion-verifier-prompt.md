@@ -97,8 +97,21 @@ Unacceptable as sole evidence:
 - previous run passed
 - stale CI output from before current changes
 - reviewer memory
-- “should be fine”
+- "should be fine"
 - unverified assumptions
+
+---
+
+## Rejection Criteria
+
+Reject completion claims that rely on any of the following:
+
+- **Stale claims**: verification output that was not run or gathered fresh for the current work. Evidence from prior runs, prior sessions, or prior CI builds does not count as current evidence.
+- **Uninspected command output**: raw command output that was captured but never inspected for exit codes, error text, or actual pass/fail content. Output must be read and confirmed, not merely referenced.
+- **Copied executor narratives without evidence**: summaries, effort descriptions, or "I verified" statements from the executor that are not backed by fresh command output, file contents, or inspectable artifact state.
+- **Verification not mapped to acceptance criteria**: passing tests or green builds that are not tied to specific acceptance criteria from the source spec and approved plan. Verification must be mapped to what the spec and plan actually require.
+
+Every piece of verification evidence must be: run or gathered fresh, inspected for actual content, and tied to a specific spec requirement or plan verification expectation.
 
 ---
 

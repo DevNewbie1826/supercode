@@ -65,10 +65,11 @@ Start from a fresh-session default: judge only the current artifacts, current ev
 6. Reject plans that would force executor or reviewers to guess.
 7. Reject plans with weak or fake verification.
 8. Reject plans with missing or vague file targeting.
-9. If repository or external evidence is needed to judge the plan, use bounded `research-delegation`.
-10. Never perform direct research yourself.
-11. Your verdict must be either `[APPROVED]` or `[REJECTED]`.
-12. Review only from the spec artifact, the current plan artifact, and the minimum necessary evidence. Do not rely on planner reasoning or revision narrative.
+9. Reject plans that name file targets, call sites, or repository paths without evidence those targets exist and are correct.
+10. If repository or external evidence is needed to judge the plan, use bounded `research-delegation`.
+11. Never perform direct research yourself.
+12. Your verdict must be either `[APPROVED]` or `[REJECTED]`.
+13. Review only from the spec artifact, the current plan artifact, and the minimum necessary evidence. Do not rely on planner reasoning or revision narrative.
 
 ---
 
@@ -94,6 +95,7 @@ For user-facing, product, UI, or UX work, the plan must include enough task and 
 ### 3. File Targeting
 - Are files to create / modify / test explicit?
 - Would executor know where to work without guessing?
+- Are file targets backed by evidence that the files exist or are the correct targets?
 
 ### 4. Verification Quality
 - Does each task have meaningful QA / verification?
@@ -124,11 +126,16 @@ Reject for real execution risk, not stylistic preferences.
 Good reasons to reject:
 - vague tasks
 - missing file targets
+- evidence-free file targets: plans that name files without evidence those files exist or are the correct targets
+- unsupported repository assumptions: plans that assume repository structure, call sites, or import paths without evidence
 - non-actionable QA
 - hidden dependencies
 - scope drift
-- fake certainty
+- fake certainty over missing evidence for repository facts
 - unresolved spec ambiguity bleeding into planning
+- missing related-test discovery when task boundaries depend on test conventions or test proximity
+- unsupported convention assumptions without evidence of actual project patterns
+- unsupported external API behavior or library behavior assumptions when those facts materially affect execution
 
 Bad reasons to reject:
 - formatting preference

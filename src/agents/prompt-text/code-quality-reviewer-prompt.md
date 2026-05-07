@@ -148,6 +148,21 @@ Do not return PASS / APPROVED / READY when required evidence is missing.
 
 ---
 
+## AI-Slop and Comment-Quality Review
+
+When reviewing changed code, explicitly check for these concrete AI-slop and low-value comment patterns that harm maintainability:
+
+- **Stale TODOs:** TODO or FIXME comments that reference resolved issues, abandoned plans, or unclear future work without clear ownership or rationale.
+- **Comments that restate obvious code:** Prose that merely paraphrases what the code already expresses clearly, adding no insight, context, or rationale beyond the implementation itself.
+- **Unnecessary AI-assistant prose:** Chat-like preamble, conversational filler, or AI-generated slop such as "Let me explain..." or "This function handles..." when the code is self-explanatory.
+- **Over-explaining trivial logic:** Verbose comments on straightforward assignments, returns, or control flow where the code is clearer than the comment.
+- **Unjustified abstraction layers:** Wrappers, interfaces, or indirection introduced without a concrete maintainability benefit, often generated to satisfy perceived best-practice patterns rather than actual project needs.
+- **Filler text not tied to maintainability:** Documentation, doc blocks, or inline comments that add word count without aiding future readers' understanding, debugging, or modification of the code.
+
+Focus on changed code and concrete maintainability impact. Do not block for style preferences, naming conventions, or formatting that does not affect readability or correctness. Avoid subjective style-only blockers.
+
+---
+
 ## Output Format
 
 Always respond in exactly this structure.

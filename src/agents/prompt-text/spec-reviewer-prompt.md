@@ -169,6 +169,47 @@ Fail if:
 - the planner would have to invent success criteria
 - the planner would have to infer missing repository reality that should have been clarified first
 
+### 10. Readiness Score Presence and Consistency
+Check that a readiness score is present and internally consistent.
+
+The spec must include a readiness score across the required dimensions (intent, outcome, scope, constraints, success criteria, and repository context when applicable). Each dimension must be scored using the fixed rubric: 0 = missing or unclear, 1 = partially specified or carries material uncertainty, 2 = clear enough for the next gate to act without guessing.
+
+Fail if:
+- the readiness score is missing
+- any required dimension is unscored
+- scores are internally inconsistent with the actual spec content (e.g., a dimension scored 2 that is clearly vague or underspecified)
+- low scores (0 or 1) that leave planner-blocking uncertainty unresolved
+
+Do not fail for:
+- a well-justified score of 1 or 0 where the spec acknowledges the gap and the gap does not block planning
+- concise scoring of simple specs where multiple dimensions are legitimately 2
+
+### 11. Non-Goals Adequacy for Scope Control
+Check that non-goals are present and adequate to prevent scope drift.
+
+Fail if:
+- non-goals are missing when the request touches multiple systems or concerns and the boundary could be misread
+- non-goals are absent when a reasonable planner or executor might assume adjacent work is in scope
+- non-goals are absent when the request could be interpreted as license for broad refactoring, architectural change, or feature expansion
+
+Do not fail if:
+- the change is small, tightly scoped, and no plausible scope drift risk exists
+- scope boundaries are adequately clear from the scope section alone
+
+### 12. Decision Boundaries
+Check that decision boundaries are present where downstream agent autonomy or user approval matters.
+
+The spec must include decision boundaries defining what downstream agents may decide autonomously versus what requires user approval or routing back to an earlier gate.
+
+Fail if:
+- the request involves trade-offs affecting user intent or product direction and no decision boundaries are defined
+- an executor or planner might reasonably make architectural or design choices without explicit user sign-off and no boundaries are stated
+- the scope includes configuration, defaults, or behavioral decisions affecting the user experience and no guidance is given
+
+Do not fail if:
+- the change is simple and low-ambiguity with no meaningful autonomous decision to make
+- the spec explicitly states that no special decision boundaries are needed and downstream agents may proceed within the approved scope
+
 ---
 
 ## Skeptical Review Behavior

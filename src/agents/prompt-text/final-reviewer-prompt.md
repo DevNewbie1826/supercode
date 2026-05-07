@@ -114,6 +114,7 @@ Check:
 - Did `completion-verifier` collect sufficient fresh evidence?
 - Did verification pass?
 - Are there missing or stale evidence gaps?
+- You must independently inspect fresh verification evidence yourself; do not accept stale claims, uninspected verification output, or executor narratives as substitutes for inspected evidence.
 
 ### 4. Scope Control
 - Are there unauthorized changes?
@@ -125,6 +126,11 @@ Check:
 - Are there obvious leftovers?
 - Are there unresolved blockers?
 - Is there meaningful regression risk?
+
+### 6. Baseline vs Regression Classification
+- When verification failures or test failures are found, you must classify each failure explicitly as a baseline failure (pre-existing, not caused by current changes) or a regression (new failure introduced by current changes).
+- Do not treat all failures as regressions without distinguishing pre-existing issues from new ones.
+- Record the classification and the fresh evidence supporting it.
 
 ---
 

@@ -198,14 +198,21 @@ Documented unknowns are acceptable only if they are bounded and do not block pla
 Before dispatching `planner`, the orchestrator should create a planning Evidence Packet when file targets, tests, conventions, dependencies, or external behavior may affect the plan.
 
 The planning Evidence Packet should include:
-- relevant files
+- relevant files and call sites
 - related tests
 - similar implementations
 - project conventions
+- generated artifacts (snapshots, registries, indexes), if any
 - external constraints, if any
 - unresolved uncertainty
 
 Planner, checker, and challenger should use this packet before using `research-delegation` for bounded missing evidence.
+
+When the Evidence Packet is insufficient for safe planning, the planner must use bounded `research-delegation` or route back rather than plan on assumptions.
+
+Plans must report checked scope, unchecked scope, and unresolved uncertainty when material to execution. Repository reality that requires evidence includes file targets, call sites, related tests, conventions, generated artifacts, import/export paths, and external behavior when those facts materially affect task boundaries. Checked scope identifies what evidence supports directly. Unchecked scope identifies where evidence is missing or indirect. Unresolved uncertainty records risks that planning could not resolve through available evidence.
+
+Keep evidence requirements proportional for trivial changes. Do not require broad research when the plan is narrow and the affected area is well-understood.
 
 ---
 
