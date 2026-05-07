@@ -98,6 +98,11 @@ The spec must contain:
 - Risks / Unknowns
 - Revisions
 
+The spec must also contain:
+
+- **Readiness Score**: a section in the spec artifact that scores each required dimension (intent, outcome, scope, constraints, success criteria, and repository context when applicable) using the fixed 0/1/2 rubric defined in the Readiness Scoring section below.
+- **Decision Boundaries** (when applicable): a section defining what downstream agents may decide autonomously versus what requires user approval or routing back. Required when the request involves trade-offs, architectural choices, or behavioral decisions that affect user intent. For simple, low-ambiguity changes, an explicit statement that no special decision boundaries are needed is sufficient.
+
 ---
 
 ## Hard Rules
@@ -151,6 +156,75 @@ For user-facing product, UI, or UX requests, also clarify and document the minim
 - acceptance criteria beyond raw text, placeholder UI, or mere function presence
 
 Do not add these product-completeness requirements for internal, prompt, config-only, tooling-only, or backend-only work unless the user request makes them part of scope.
+
+---
+
+## Readiness Scoring
+
+Before invoking `spec-reviewer`, assign a lightweight readiness score to the spec using the fixed rubric below.
+
+This score is a readiness aid, not a fake-precision estimation framework. It identifies dimensions that need clarification. It does not require arbitrary numerical precision beyond the fixed level meanings.
+
+### Fixed Rubric
+
+Score each dimension using these fixed levels:
+
+- 0 = missing or unclear
+- 1 = partially specified or carries material uncertainty
+- 2 = clear enough for the next gate to act without guessing
+
+### Required Dimensions
+
+Score each of the following dimensions individually:
+
+- **Intent**: what the request is actually trying to achieve
+- **Outcome**: what the target state looks like
+- **Scope**: what is in scope and what is out of scope
+- **Constraints**: technical, product, compatibility, operational, or other constraints that materially affect planning
+- **Success Criteria**: concrete, testable criteria for judging completion
+- **Repository Context** (when applicable): relevant repository reality including existing implementation, tests, conventions, call sites, and file targets when they materially affect execution
+
+### Scoring Guidance
+
+- A dimension may be scored `2` based on a short, clear statement; length is not the measure.
+- For simple, well-understood changes, several dimensions may be `2` with minimal prose. Do not force elaboration when the spec is already planning-ready.
+- Block or reroute to clarification only when low scores (`0` or `1`) or internally inconsistent scores leave planning-blocking uncertainty unresolved.
+- Do not use the score to justify blocking when the underlying spec text is clearly sufficient for planning.
+
+### Presentation
+
+The readiness score belongs in `docs/supercode/<work_id>/spec.md` as a durable section of the spec artifact. `spec-reviewer` reviews `spec.md`, so the score must be present there — not only in a transient self-review summary. Show each dimension and its score with a brief justification for any dimension scored below `2`. For simple specs where most dimensions are clearly `2`, a compact inline table or short list is sufficient; do not pad with unnecessary prose.
+
+---
+
+## Non-Goals and Scope Control
+
+The spec must include a `Non-Goals` section that is more than a placeholder.
+
+Non-goals are required when their absence would permit scope drift, unauthorized downstream agent decisions, or downstream guessing about what the work does not cover. For small, tightly scoped changes with no plausible drift risk, a brief non-goals statement or explicit scope boundary is sufficient.
+
+Strengthen non-goals when:
+- the request touches multiple systems or concerns and the boundary could be misread
+- a reasonable planner or executor might assume adjacent work is in scope
+- the request could be interpreted as license for broad refactoring, architectural change, or feature expansion
+
+---
+
+## Decision Boundaries
+
+The spec must include a `Decision Boundaries` section when downstream agents (planner, executor, reviewers) would otherwise need to guess what they may decide autonomously versus what requires user approval or routing back.
+
+Define explicitly:
+- what downstream agents may decide autonomously within the approved scope
+- what requires user approval before proceeding
+- what requires routing back to an earlier gate (spec or clarification)
+
+Decision boundaries are required when:
+- the request involves trade-offs that could affect user intent or product direction
+- an executor or planner might reasonably make architectural or design choices without explicit user sign-off
+- the scope includes configuration, defaults, or behavioral decisions that affect the user experience
+
+For simple, low-ambiguity changes where no meaningful autonomous decision exists, decision boundaries may be implicit in the bounded scope and constraints. State this explicitly: "No special decision boundaries; downstream agents may proceed within the approved scope."
 
 ---
 
@@ -397,6 +471,9 @@ After approval:
 The `spec` skill is complete only when:
 - `work_id` has been assigned
 - `docs/supercode/<work_id>/spec.md` exists
+- a readiness score has been assigned across all required dimensions
+- non-goals are present and adequate to prevent scope drift where needed
+- decision boundaries are present where autonomous downstream decisions or user approval would otherwise be ambiguous
 - self-review has passed
 - `spec-reviewer` has passed the spec
 - the spec is planning-ready
