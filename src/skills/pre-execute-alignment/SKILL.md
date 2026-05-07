@@ -113,6 +113,21 @@ Do not use this skill when:
 
 ---
 
+## Phase 2 Artifact Lifecycle
+
+The `pre-execute-alignment` stage records alignment decisions into Phase 2 artifacts.
+
+### Pre-Execute-Alignment Stage: Artifact Responsibilities
+
+- **Responsible actor**: alignment/orchestrator
+- **Artifact action**: record execution order, blockers, and route; update `state.json` and append to `ledger.jsonl`
+- **Minimum ledger event**: `alignment_decision` or `gate_decision`
+- **State fields updated**: `active_stage`, `active_gate_or_status`, `active_task`, `blockers`, `next_route`, `last_updated`
+
+Record the alignment outcome, execution order, blockers, next route, and relevant artifact refs by updating `docs/supercode/<work_id>/state.json` with canonical keys including `active_task`, `next_route`, and `blockers`. Append an `alignment_decision` event to `docs/supercode/<work_id>/ledger.jsonl` using canonical event keys: `timestamp`, `event_type`, `stage`, `task_id`, `summary`, `artifact_refs`.
+
+---
+
 ## Evidence Packet Behavior
 
 Before using `task-compliance-checker`, the orchestrator should provide an Evidence Packet when task clarity, dependencies, conflict surfaces, related tests, or project conventions depend on repository structure.

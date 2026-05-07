@@ -54,6 +54,29 @@ Neither subagent may modify files.
 
 ---
 
+## Phase 2 Artifact Lifecycle
+
+The `final-review` stage inspects persisted Phase 2 artifacts as part of the evidence base and records reviewer-owned outcomes.
+
+### Final-Review Stage: Artifact Responsibilities
+
+- **Responsible actor**: final reviewer/orchestrator
+- **Artifact action**: inspect `evidence.md`, `state.json`, `ledger.jsonl`, and `verification/<task_id>.json`; write `final-review.md`; may add reviewer outcome references
+- **Minimum ledger event**: `final_review_decision` or `routed_return`
+- **State fields updated**: `active_stage`, `active_gate_or_status`, `blockers`, `next_route`, `last_updated`
+
+The final reviewer must read persisted `docs/supercode/<work_id>/evidence.md`, `docs/supercode/<work_id>/state.json`, `docs/supercode/<work_id>/ledger.jsonl`, and task verification records under `docs/supercode/<work_id>/verification/<task_id>.json` as part of final-review evidence. This preserves reviewer isolation and final-review artifact behavior while leveraging durable Phase 2 artifacts.
+
+The `reviewer_outcomes` field in task verification records is nullable, null, empty, or pending before final review. The final reviewer may populate or reference `reviewer_outcomes` during the review. The `record_status` field on verification records uses narrow values: `verified`, `pending`, `not_applicable`, `pre_adoption_unavailable`, `failed`.
+
+Task status values in verification records use narrow values: `pending`, `in_progress`, `completed`, `blocked`, `skipped`. Command/result entry statuses use: `pass`, `fail`, `not_run`, `not_applicable`.
+
+### Terminal Handoff Validation
+
+Before the final-review handoff, the final repository and artifact state must be validated after the final artifact write. The execute stage is responsible for running this terminal validation before handing off. The final validation evidence may live in orchestration or final verification evidence and does not need to self-record in the same artifact if doing so would require another write. The final reviewer should confirm that terminal handoff validation was performed by inspecting available validation evidence.
+
+---
+
 ## Position in the Workflow
 
 This skill runs after:

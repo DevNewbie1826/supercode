@@ -58,6 +58,21 @@ The orchestrator must report at minimum:
 
 ---
 
+## Phase 2 Artifact Lifecycle
+
+The `worktree` stage carries the Phase 2 artifact convention into the isolated worktree. This is documentation-only guidance; no new copy, cleanup, migration, or runtime worktree behavior is added.
+
+### Worktree Stage: Artifact Responsibilities
+
+- **Responsible actor**: worktree/orchestrator
+- **Artifact action**: carry artifact path convention into isolated worktree; documentation-only preservation guidance
+- **Minimum ledger event**: `stage_transition` or `gate_decision`
+- **State fields updated**: `active_stage`, `active_gate_or_status`, `blockers`, `next_route`, `last_updated`
+
+The artifact directory convention includes `evidence.md`, `state.json`, `ledger.jsonl`, and `verification/` under `docs/supercode/<work_id>/`. These artifacts are preserved with the work item as documentation. Do not add new copy, cleanup, migration, or runtime worktree behavior for Phase 2 artifacts.
+
+---
+
 ## Core Principle
 
 Always create worktrees inside the repository-local `.worktrees/` directory.

@@ -15,3 +15,9 @@ Always use `todowrite` to keep the todo list aligned with actual execution.
 - Clear the todo list only when the workflow reaches a real terminal state after the final required non-`todowrite` action.
 
 Do not continue work with stale todo state.
+
+## Phase 2 Artifact Complement Rule
+
+`todowrite` remains the active in-session todo source and primary task tracking mechanism. `state.json` at `docs/supercode/<work_id>/state.json` is a durable snapshot/complement for resume and review visibility, not a replacement for active `todowrite`-based todo synchronization.
+
+If `state.json` is stale or mismatched against active `todowrite` state, report the mismatch and deliberately reconcile rather than silently trusting the stale `state.json` file. Stale or outdated state must be reported and reconciled, not silently trusted.
