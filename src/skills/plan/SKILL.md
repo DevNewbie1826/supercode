@@ -193,6 +193,25 @@ Documented unknowns are acceptable only if they are bounded and do not block pla
 
 ---
 
+## Phase 2 Artifact Lifecycle
+
+The `plan` stage reads persisted evidence and records planning state into Phase 2 artifacts.
+
+### Plan Stage: Artifact Responsibilities
+
+- **Responsible actor**: planner/orchestrator
+- **Artifact action**: read/update `docs/supercode/<work_id>/evidence.md`; write `plan.md`; update `state.json` snapshot; append events to `ledger.jsonl`
+- **Minimum ledger event**: `stage_transition` or `gate_decision`
+- **State fields updated**: `active_stage`, `active_gate_or_status`, `blockers`, `next_route`, `last_updated`
+
+The planner should read persisted `docs/supercode/<work_id>/evidence.md` when present and use it as the planning Evidence Packet source. The planning Evidence Packet should include internal evidence, external evidence, checked scope, unchecked scope, and unresolved uncertainty sections from the persisted evidence file.
+
+Record planning state snapshot in `docs/supercode/<work_id>/state.json` using canonical JSON keys: `work_id`, `active_stage`, `active_gate_or_status`, `active_task`, `completed_tasks`, `blockers`, `next_route`, `last_updated`. Each `completed_tasks` entry must include `task_id`, `status`, and `verification_record_status`.
+
+Append meaningful planning events to `docs/supercode/<work_id>/ledger.jsonl` using canonical event keys: `timestamp`, `event_type`, `stage`, `task_id`, `summary`, `artifact_refs`. Minimum required event types include `artifact_initialized`, `evidence_captured`, `stage_transition`, `gate_decision`, and `alignment_decision`.
+
+---
+
 ## Evidence Packet Behavior
 
 Before dispatching `planner`, the orchestrator should create a planning Evidence Packet when file targets, tests, conventions, dependencies, or external behavior may affect the plan.

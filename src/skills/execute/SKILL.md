@@ -578,6 +578,103 @@ If the blocker is an execution/debug problem, use `systematic-debugging`.
 
 ---
 
+## Phase 2 Artifact Lifecycle
+
+This section defines the Phase 2 artifact lifecycle for workflow stages. Artifacts are stored under `docs/supercode/<work_id>/` and include `evidence.md`, `state.json`, `ledger.jsonl`, and `verification/<task_id>.json`.
+
+The public stage chain remains: `spec` → `worktree` → `plan` → `pre-execute-alignment` → `execute` → `final-review` → `finish`.
+
+### Canonical Artifact Lifecycle Matrix
+
+| Stage | Responsible actor | Artifact action | Minimum ledger event | State fields updated |
+|---|---|---|---|---|
+| `spec` | spec/orchestrator | create/update `evidence.md`; initialize artifact set when `work_id` is stable | `artifact_initialized` or `evidence_captured` | `work_id`, `active_stage`, `active_gate_or_status`, `blockers`, `next_route`, `last_updated` |
+| `worktree` | worktree/orchestrator | carry artifact path convention into isolated worktree; documentation-only preservation guidance | `stage_transition` or `gate_decision` | `active_stage`, `active_gate_or_status`, `blockers`, `next_route`, `last_updated` |
+| `plan` | planner/orchestrator | read/update `evidence.md`; write `plan.md`; update `state.json` snapshot; append events to `ledger.jsonl` | planning started or completed; stage transition or gate decision | `active_stage`, `active_gate_or_status`, `blockers`, `next_route`, `last_updated` |
+| `pre-execute-alignment` | alignment/orchestrator | record execution order, blockers, and route; update `state.json` and append to `ledger.jsonl` | `alignment_decision` or `gate_decision` | `active_stage`, `active_gate_or_status`, `active_task`, `blockers`, `next_route`, `last_updated` |
+| `execute` | executor/orchestrator | append task events to `ledger.jsonl`; write/update `verification/<task_id>.json`; update `state.json` from `todowrite` snapshot | `task_started`, `task_completed`, or `task_blocked` | `active_stage`, `active_gate_or_status`, `active_task`, `completed_tasks`, `blockers`, `next_route`, `last_updated` |
+| `final-review` | final reviewer/orchestrator | inspect `evidence.md`, `state.json`, `ledger.jsonl`, and `verification/<task_id>.json`; write `final-review.md`; may add reviewer outcome references | `final_review_decision` or `routed_return` | `active_stage`, `active_gate_or_status`, `blockers`, `next_route`, `last_updated` |
+| `finish` | finisher/orchestrator | documentation-only preservation of artifacts; no new cleanup or copy runtime behavior | `finish_ready` or route to `finish` | `active_stage`, `active_gate_or_status`, `next_route`, `last_updated` |
+
+### Execute Stage: Artifact Responsibilities
+
+The `execute` stage has specific Phase 2 artifact responsibilities:
+
+- **Task verification records**: For each task, the executor writes/updates `docs/supercode/<work_id>/verification/<task_id>.json`. The executor owns the commands, results, diagnostics_status, and unresolved_concerns fields. The reviewer_outcomes field remains nullable, null, empty, or pending until the reviewer-owned `final-review` stage supplies them.
+- **State updates**: At task start, completion, and blockage, update `docs/supercode/<work_id>/state.json`. State snapshots must be derived from active workflow and `todowrite` reality rather than treated as authoritative on their own.
+- **Ledger events**: Append task lifecycle events to `docs/supercode/<work_id>/ledger.jsonl`. The ledger is append-only: append one JSON object per line; do not rewrite, reorder, or delete historical lines during normal workflow progress.
+- **Artifact validation**: When updating artifacts, update records first, then run targeted current-docs artifact validation. Command results included in the same task record should note a later validation command rather than claiming impossible final self-inclusion.
+- **Terminal handoff validation**: Before handing off to `final-review`, the final repository and artifact state must be validated after the final artifact write. The final validation evidence may live in orchestration or final verification evidence and does not need to self-record in the same artifact if doing so would require another write.
+
+### Canonical Field Definitions
+
+#### state.json Canonical Fields
+
+`docs/supercode/<work_id>/state.json` must include these canonical JSON keys:
+
+| Canonical key | Meaning |
+|---|---|
+| `work_id` | Stable work item id |
+| `active_stage` | Current public workflow stage |
+| `active_gate_or_status` | Meaningful workflow gate/status string such as `planning`, `aligned`, `executing`, `blocked`, `verification_passed`, `final_review_pending`, or `routed_return` |
+| `active_task` | Current task id or `null` when no task is active |
+| `completed_tasks` | Array of task status objects; each entry includes `task_id`, `status`, and `verification_record_status` |
+| `blockers` | Current blockers or empty array; each entry includes `summary` and `route_or_status` |
+| `next_route` | Next workflow route/stage decision |
+| `last_updated` | ISO-like timestamp string for the state snapshot update |
+
+Each `completed_tasks` entry must include at least `task_id`, `status`, and `verification_record_status`. Use narrow task `status` values: `pending`, `in_progress`, `completed`, `blocked`, or `skipped`. Use narrow `verification_record_status` values: `verified`, `pending`, `not_applicable`, `pre_adoption_unavailable`, or `failed`. This prevents backfilled state from implying structured verification records exist for tasks unless files actually exist.
+
+Each `blockers` entry must include at least `summary` and `route_or_status` so blockers are actionable rather than opaque strings.
+
+#### ledger.jsonl Canonical Event Fields
+
+Each line in `docs/supercode/<work_id>/ledger.jsonl` is one JSON object with these canonical keys:
+
+| Canonical key | Meaning |
+|---|---|
+| `timestamp` | Event timestamp |
+| `event_type` | Event type |
+| `stage` | Public workflow stage associated with the event |
+| `task_id` | Task id when applicable; nullable or omissible for stage-level events |
+| `summary` | Short event summary |
+| `artifact_refs` | Array of relevant artifact path references |
+
+Minimum required `event_type` values: `artifact_initialized`, `evidence_captured`, `stage_transition`, `gate_decision`, `alignment_decision`, `task_started`, `task_completed`, `task_blocked`, `artifact_validation`, `final_review_decision`, `routed_return`, `finish_ready`.
+
+The schema may allow additional strings for future workflow events.
+
+#### verification/<task_id>.json Canonical Fields
+
+`docs/supercode/<work_id>/verification/<task_id>.json` must include these canonical keys:
+
+| Canonical key | Meaning |
+|---|---|
+| `task_id` | Task id for the record |
+| `status` | Task verification status; uses narrow values `pending`, `in_progress`, `completed`, `blocked`, `skipped` |
+| `commands` | Commands/checks run by executor; entries include command/check name, result status (`pass`, `fail`, `not_run`, `not_applicable`), summary, and timestamp when known |
+| `results` | Results for commands/checks; entries include command/check name, result status (`pass`, `fail`, `not_run`, `not_applicable`), summary, and timestamp when known |
+| `executor_evidence` | Executor-owned evidence and notes |
+| `reviewer_outcomes` | Reviewer-owned outcomes; nullable, empty, or pending before reviewer action |
+| `diagnostics_status` | Diagnostics/typecheck/lint status object including `status` and `summary` |
+| `unresolved_concerns` | Remaining concerns or empty array |
+| `record_status` | Provenance/status of this verification record; uses narrow values `verified`, `pending`, `not_applicable`, `pre_adoption_unavailable`, `failed` |
+
+#### evidence.md Required Sections
+
+`docs/supercode/<work_id>/evidence.md` must include these required sections:
+- **Internal evidence**: Repository evidence supporting the workflow
+- **External evidence**: External research, library docs, or third-party behavior evidence
+- **Checked scope**: Evidence scope that has been directly verified
+- **Unchecked scope**: Evidence scope where verification is missing or indirect
+- **Unresolved uncertainty**: Risks or unknowns that could not be resolved through available evidence
+
+### Non-Goals (Phase 2 Scope Boundary)
+
+Phase 2 artifact/state features do not include: mailbox system, file ownership registry, per-worker worktree, parallel executor coordination beyond recording state/events, skill-embedded MCP runtime, hierarchical AGENTS.md, wiki/knowledge layer, or ultragoal mode. These Phase 3 and Phase 4 features must not be implemented as part of Phase 2.
+
+---
+
 ## Common Mistakes
 
 Never:
@@ -587,7 +684,7 @@ Never:
 - ignore LSP diagnostics after edits
 - mark a task complete before it passes verification
 - let reviewers change code
-- let one task inherit another task’s review result
+- let one task inherit another task's review result
 - continue in optimistic parallel mode after hidden conflicts appear
 - fix failures without first routing through `systematic-debugging`
 

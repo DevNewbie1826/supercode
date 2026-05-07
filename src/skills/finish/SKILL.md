@@ -401,6 +401,21 @@ If worktree cleanup fails:
 
 ---
 
+## Phase 2 Artifact Lifecycle
+
+The `finish` stage provides documentation-only preservation guidance for Phase 2 artifacts. No new cleanup, copy, or runtime behavior is introduced.
+
+### Finish Stage: Artifact Responsibilities
+
+- **Responsible actor**: finisher/orchestrator
+- **Artifact action**: documentation-only preservation of artifacts; no new cleanup or copy runtime behavior
+- **Minimum ledger event**: `finish_ready` or route to `finish`
+- **State fields updated**: `active_stage`, `active_gate_or_status`, `next_route`, `last_updated`
+
+Phase 2 artifacts under `docs/supercode/<work_id>/` — including `evidence.md`, `state.json`, `ledger.jsonl`, and `verification/` — are preserved with the work item as documentation. Do not delete, cleanup, or modify these artifact files during the finish stage. No new cleanup or copy runtime behavior is added for Phase 2 artifacts.
+
+---
+
 ## Common Mistakes
 
 Never:

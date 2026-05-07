@@ -228,6 +228,28 @@ For simple, low-ambiguity changes where no meaningful autonomous decision exists
 
 ---
 
+## Phase 2 Artifact Lifecycle
+
+The `spec` stage is responsible for creating and initializing the Phase 2 artifact set under `docs/supercode/<work_id>/`.
+
+### Spec Stage: Artifact Responsibilities
+
+- **Responsible actor**: spec/orchestrator
+- **Artifact action**: create/update `docs/supercode/<work_id>/evidence.md`; initialize the artifact set when `work_id` is stable
+- **Minimum ledger event**: `artifact_initialized` or `evidence_captured`
+- **State fields updated**: `work_id`, `active_stage`, `active_gate_or_status`, `blockers`, `next_route`, `last_updated`
+
+When the Evidence Packet is materialized, save it as `docs/supercode/<work_id>/evidence.md` with these required sections:
+- Internal evidence: repository evidence supporting the workflow
+- External evidence: external research, library docs, or third-party behavior evidence
+- Checked scope: evidence scope that has been directly verified
+- Unchecked scope: evidence scope where verification is missing or indirect
+- Unresolved uncertainty: risks or unknowns that could not be resolved through available evidence
+
+The spec stage must include the evidence.md section validation that confirms internal evidence, external evidence, checked scope, unchecked scope, and unresolved uncertainty sections are present.
+
+---
+
 ## Evidence Packet Behavior
 
 During `spec`, the orchestrator should create an Evidence Packet when repository reality or external behavior materially affects clarification.
@@ -236,6 +258,8 @@ Use explorer-backed internal evidence for existing implementation, project struc
 Use librarian-backed external evidence for library/framework/API behavior and version-specific constraints.
 
 Do not wait for `spec-reviewer` to discover missing evidence if the need is already obvious.
+
+Materialize the Evidence Packet as `docs/supercode/<work_id>/evidence.md` so downstream stages can read persisted evidence without depending on conversation context.
 
 ---
 

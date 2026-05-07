@@ -1,0 +1,56 @@
+{
+  "work_id": "20260507-phase2-artifact-state-b4c8",
+  "active_stage": "execute",
+  "active_gate_or_status": "executing",
+  "active_task": null,
+  "completed_tasks": [
+    {
+      "task_id": "T00",
+      "status": "completed",
+      "verification_record_status": "pre_adoption_unavailable"
+    },
+    {
+      "task_id": "T01",
+      "status": "completed",
+      "verification_record_status": "pre_adoption_unavailable"
+    },
+    {
+      "task_id": "T02",
+      "status": "completed",
+      "verification_record_status": "pre_adoption_unavailable"
+    },
+    {
+      "task_id": "T03",
+      "status": "completed",
+      "verification_record_status": "pre_adoption_unavailable"
+    },
+    {
+      "task_id": "T04",
+      "status": "completed",
+      "verification_record_status": "pre_adoption_unavailable"
+    },
+    {
+      "task_id": "T05",
+      "status": "completed",
+      "verification_record_status": "verified"
+    },
+    {
+      "task_id": "T06",
+      "status": "completed",
+      "verification_record_status": "verified"
+    },
+    {
+      "task_id": "T07",
+      "status": "completed",
+      "verification_record_status": "verified"
+    },
+    {
+      "task_id": "T08",
+      "status": "completed",
+      "verification_record_status": "verified"
+    }
+  ],
+  "blockers": [],
+  "next_route": "final-review",
+  "last_updated": "2026-05-08T00:18:00Z"
+}
