@@ -128,6 +128,35 @@ Record the alignment outcome, execution order, blockers, next route, and relevan
 
 ---
 
+## Phase 3-1 Ownership and Conflict-Sensitive Batching
+
+The `pre-execute-alignment` stage must prepare the ownership registry and apply conflict-sensitive batching based on ownership modes before execution begins.
+
+### Ownership Registry Preparation
+
+- Ownership registry artifact: `docs/supercode/<work_id>/ownership.json`
+- The alignment stage must assign ownership entries per task before execution begins, recording which files each task may write, append, or read.
+- Each task must receive explicit ownership entries that define its write scope, mode, and allowed operations.
+- Ownership assignments must be recorded as part of the alignment package so executors know their file boundaries without guessing.
+
+### Conflict-Sensitive Batching
+
+- Conflict-sensitive batching uses ownership entries to prevent parallel tasks from modifying the same file in the same batch.
+- Tasks with `exclusive_write` entries for the same target must not be scheduled in the same parallel batch.
+- Tasks with `sequenced_write` entries for the same target must be serialized across batches.
+- Tasks with `shared_append` entries may run in parallel if they are only appending to the same file.
+- The alignment stage must inspect the ownership registry to detect ownership conflicts and adjust batch construction accordingly.
+- When in doubt about ownership conflicts, serialize rather than parallelize.
+
+### Mailbox Handoff Expectations
+
+- The alignment stage must produce an `executor_handoff` mailbox record in `docs/supercode/<work_id>/mailbox.jsonl` when handing off to the execute stage. The record's `message_type` must be `executor_handoff` (the canonical type); the `summary` field should describe the plan-to-execute handoff content.
+- The handoff record must include the aligned execution order, batch assignments, ownership entry references, conflict warnings, and per-task verification expectations.
+- The handoff record must reference the alignment package so executors can locate their task context without asking the orchestrator.
+- If the alignment stage identifies unresolved blockers that prevent safe execution, it must append a `blocker` mailbox record instead of a handoff record.
+
+---
+
 ## Evidence Packet Behavior
 
 Before using `task-compliance-checker`, the orchestrator should provide an Evidence Packet when task clarity, dependencies, conflict surfaces, related tests, or project conventions depend on repository structure.

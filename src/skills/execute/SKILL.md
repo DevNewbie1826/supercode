@@ -675,6 +675,69 @@ Phase 2 artifact/state features do not include: mailbox system, file ownership r
 
 ---
 
+## Phase 3-1 Execution Ownership Reference
+
+This section is the canonical Phase 3-1 execution ownership reference for the execute stage. Ownership scope is a hard workflow policy: if a task modifies files outside its ownership allowance, task review or final review must fail. This is a hard workflow failure, not an advisory warning.
+
+### Ownership Registry
+
+- Artifact path: `docs/supercode/<work_id>/ownership.json`
+- Canonical top-level fields: `work_id`, `entries`
+- Canonical ownership entry fields: `entry_id`, `target`, `target_type`, `owner_task_id`, `mode`, `status`, `allowed_operations`, `policy_summary`, `conflict_notes`, `blocker_refs`
+- `target_type` is `path` only for Phase 3-1; `glob` matching is deferred to Phase 3-2 and is not supported.
+- Exact repo-relative path matching only; no directory-prefix expansion, no glob expansion.
+- Canonical ownership modes: `exclusive_write`, `shared_append`, `orchestrator_owned`, `sequenced_write`, `read_only`
+- Canonical ownership statuses: `active`, `released`, `blocked`, `violated`
+- Canonical allowed operations: `read`, `write`, `append`, `create`, `delete`, `rename`
+- Ownership mode/operation invariants are canonical per-entry constraints: `read_only` accepts only `read`; `exclusive_write` accepts `read`, `write`, `create`, `delete`, `rename` but not `append`; `shared_append` accepts only `read` and `append`; `orchestrator_owned` requires `owner_task_id: "orchestrator"`; `sequenced_write` accepts `read`, `write`, `create`, `delete`, `rename` but not `append` and requires serial batching.
+
+### Ownership Violation
+
+An ownership violation occurs when a task modifies a file outside its ownership allowance. Ownership violations are hard workflow failures: if a task modifies files outside its ownership allowance, task review or final review must fail. This is a workflow contract failure, not a soft warning.
+
+### Ownership Evidence in Per-Task Verification Records
+
+Each task must record `ownership_evidence` in its verification record at `docs/supercode/<work_id>/verification/<task_id>.json`. The executor must manually capture ownership evidence using these canonical fields:
+
+- `task_start_changed_files`: array of path strings present in the worktree before the task began.
+- `task_end_changed_files`: array of path strings present in the worktree after the task ended.
+- `task_local_changed_files`: array of path strings attributed to the current task by the executor/reviewer.
+- `preexisting_changed_files_touched`: array of path strings that were already changed before task start and were touched again by this task.
+- `attribution_method`: one of `executor_edit_log`, `before_after_snapshot`, `reviewer_confirmed`, `pre_registry_bootstrap`, `not_applicable`.
+- `attribution_limitations`: array of strings describing ambiguity in task-local attribution.
+- `changed_files`: array of changed-file evidence entries, each with `path`, `operation`, `ownership_entry_id`, and `coverage_status`.
+- `actual_changed_files_source`: string describing the manual source used to identify actual changed files.
+- `actual_changed_files`: array of path strings from the inspected changed-file source.
+- `notes`: array of strings for manual reviewer context.
+
+If a task edits a file already present in `task_start_changed_files`, it must list that file in `preexisting_changed_files_touched`. Omitted or missing evidence for any `task_local_changed_files` or `preexisting_changed_files_touched` entry not present in `changed_files[]` is a task-local evidence failure, a blocker, or a route-back reason.
+
+### Security Trigger Handling
+
+Security triggers apply when the work changes code or workflow behavior that affects a security-sensitive risk surface. Routine executor mechanics — such as editing ordinary docs, tests, schemas, running tests/typecheck (test execution), or making non-security wording changes — do not automatically require security research unless they affect authentication_authorization, secrets_credentials_env_tokens, filesystem_mutation, shell_command_execution, git_operation, network_external_api, dependency_install_update, sandbox_worktree_permission_path, or generated_untrusted_input capabilities.
+
+Security triggers are routed through existing research and review mechanisms, not through a new dedicated stage. Execute must handle security triggers without creating a new public stage.
+
+Each task must record `security_trigger_evidence` in its verification record with canonical fields: `triggered_categories` (array of triggered security category values), `decision` (one of `not_triggered`, `triggered_evidence_recorded`, `route_back_required`), `evidence_refs` (array of evidence references), and `notes` (array of strings for security trigger context).
+
+### Mailbox Records
+
+The execute stage uses the durable mailbox artifact at `docs/supercode/<work_id>/mailbox.jsonl` for append-only, orchestrator-mediated durable records. The mailbox is not free agent-to-agent chat; runtime message broker infrastructure is explicitly excluded and not implemented. Executors may append `executor_handoff` and `status_update` messages to record durable handoffs, findings, blockers, and status changes.
+
+### Phase 3-2 Deferrals
+
+The following are Phase 3-2 deferred candidates and must not be implemented in Phase 3-1:
+
+- automatic ownership validation against per-task changed files
+- conflict preflight before executing parallel batches
+- mailbox routing enforcement for unresolved messages and reviewer findings
+- actual security reviewer/research execution subsystem
+- multi-agent hyperplan challengers beyond checklist form
+- structured machine-checkable completion matrix artifact
+- optional AI-slop cleanup gate
+
+Phase 3-1 exclusions: per-worker worktrees (excluded and deferred), OS-level or distributed locks (not implemented), full OMO Team Mode (excluded), raw ultrawork/ulw mode (excluded, not enabled), free agent-to-agent chat (excluded), runtime message broker infrastructure (not implemented). No new public workflow stage is introduced; the existing stages are used only.
+
 ## Common Mistakes
 
 Never:

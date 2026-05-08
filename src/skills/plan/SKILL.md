@@ -462,3 +462,90 @@ If planning returns after a later failure:
 - record the reason under `Revisions`
 - re-run checker and challenger
 - do not create a second plan file for the same work item
+
+---
+
+## Hyperplan-Lite Challenge Checklist
+
+The `plan-challenger` must evaluate the plan from multiple perspectives to expose hidden weaknesses. This is a lightweight multi-perspective challenge requirement that strengthens `plan-challenger` behavior without adding new public stages.
+
+Required challenge perspectives:
+
+- **Scope creep / non-goal challenge**: verify the plan does not expand beyond the approved spec; flag any scope creep or non-goal work.
+- **Dependency and sequencing challenge**: verify task dependencies are real and ordering is sound; flag missing or incorrect dependency edges.
+- **Verification adequacy challenge**: verify each task has meaningful, executable verification; flag vague or untestable QA expectations.
+- **Concurrency and ownership challenge**: verify parallel claims are safe considering file ownership and write surfaces; flag optimistic parallelism.
+- **Security/risk trigger challenge**: verify whether the plan changes code or behavior that affects a security-sensitive capability; flag missing security trigger considerations.
+- **Completion matrix challenge**: verify the plan maps each spec success criterion to tasks, evidence, and status; flag criteria without task coverage.
+
+The plan artifact must record challenge findings and how major findings were resolved or accepted. The strict-completion matrix must tie spec success criteria to plan tasks and verification evidence without creating a new public stage. The strict-completion matrix uses canonical statuses: `pending`, `satisfied`, `blocked`, `not_applicable`. Matrix rows are limited to approved spec success criteria only; execution and final-review must not add new completion criteria. The strict-completion matrix must not expand scope beyond the approved spec and plan (not raw ultrawork or ulw mode). Phase 3-1 records the matrix as a markdown table inside the plan artifact and final-review artifact/section. A separate structured machine-checkable completion matrix artifact is deferred to Phase 3-2. After plan approval, `plan.md` is read-only execution input; execution must not update strict-completion statuses/evidence in `plan.md`. Task evidence belongs in `verification/<task_id>.json` and final status/evidence belongs in the final-review artifact/section.
+
+---
+
+## Phase 3-1 Coordination Reference
+
+This section is the canonical Phase 3-1 coordination reference for the plan stage. It lists exact field names, enum values, statuses, and invariant concepts that downstream skill docs and tests must align with.
+
+### Mailbox Artifact
+
+- Artifact path: `docs/supercode/<work_id>/mailbox.jsonl`
+- Lifecycle: append-only, orchestrator-mediated durable records. Existing records are not rewritten; resolution is represented by appending a follow-up record with the same `thread_id` and an updated `status`. Free agent-to-agent chat and runtime message broker infrastructure are explicitly excluded and not implemented.
+- Canonical mailbox fields: `message_id`, `thread_id`, `timestamp`, `sender`, `recipient`, `message_type`, `stage`, `task_id`, `summary`, `artifact_refs`, `status`
+- Canonical `message_type` values: `research_request`, `research_response`, `executor_handoff`, `reviewer_finding`, `blocker`, `route_back_reason`, `final_review_evidence_gap`, `status_update`
+- Canonical `status` values: `open`, `acknowledged`, `resolved`, `blocked`, `superseded`
+
+### Ownership Registry Artifact
+
+- Artifact path: `docs/supercode/<work_id>/ownership.json`
+- Canonical top-level fields: `work_id`, `entries`
+- Canonical ownership entry fields: `entry_id`, `target`, `target_type`, `owner_task_id`, `mode`, `status`, `allowed_operations`, `policy_summary`, `conflict_notes`, `blocker_refs`
+- `target_type` is `path` only for Phase 3-1; `glob` matching is deferred to Phase 3-2 and is not accepted by Phase 3-1 helper schemas.
+- Canonical ownership modes: `exclusive_write`, `shared_append`, `orchestrator_owned`, `sequenced_write`, `read_only`
+- Canonical ownership statuses: `active`, `released`, `blocked`, `violated`
+- Canonical allowed operations: `read`, `write`, `append`, `create`, `delete`, `rename`
+- Ownership mode/operation invariants are canonical per-entry constraints: `read_only` accepts only `read`; `exclusive_write` accepts `read`, `write`, `create`, `delete`, `rename` but not `append`; `shared_append` accepts only `read` and `append`; `orchestrator_owned` requires `owner_task_id: "orchestrator"`; `sequenced_write` accepts `read`, `write`, `create`, `delete`, `rename` but not `append` and requires serial batching. Invalid mode/operation combinations must fail manual registry/batch workflow checks.
+
+### Ownership Evidence
+
+- `ownership_evidence` is recorded in per-task verification records at `docs/supercode/<work_id>/verification/<task_id>.json`.
+- Canonical `ownership_evidence` fields: `task_start_changed_files`, `task_end_changed_files`, `task_local_changed_files`, `preexisting_changed_files_touched`, `attribution_method`, `attribution_limitations`, `changed_files`, `actual_changed_files_source`, `actual_changed_files`, `notes`
+- Canonical `attribution_method` values: `executor_edit_log`, `before_after_snapshot`, `reviewer_confirmed`, `pre_registry_bootstrap`, `not_applicable`
+- Canonical `changed_files[]` entry fields: `path`, `operation`, `ownership_entry_id`, `coverage_status`
+- Canonical `coverage_status` values: `covered`, `uncovered`, `conflict`, `not_applicable`
+
+### Security Trigger Evidence
+
+- `security_trigger_evidence` is recorded in per-task verification records.
+- Canonical `security_trigger_evidence` fields: `triggered_categories`, `decision`, `evidence_refs`, `notes`
+- Canonical `SecurityTriggerCategorySchema` values: `authentication_authorization`, `secrets_credentials_env_tokens`, `filesystem_mutation`, `shell_command_execution`, `git_operation`, `network_external_api`, `dependency_install_update`, `sandbox_worktree_permission_path`, `generated_untrusted_input`
+- Canonical `security_trigger_evidence.decision` values: `not_triggered`, `triggered_evidence_recorded`, `route_back_required`
+
+### Strict-Completion Matrix
+
+- Canonical matrix statuses: `pending`, `satisfied`, `blocked`, `not_applicable`
+- Matrix rows are limited to approved spec success criteria only.
+- Phase 3-1 records the matrix as a markdown table in the plan and final-review. A separate machine-checkable artifact is deferred to Phase 3-2.
+
+### Phase 3-2 Deferred Candidates
+
+The following are documented as Phase 3-2 roadmap items and must not be implemented in Phase 3-1:
+
+- automatic ownership validation against per-task changed files
+- conflict preflight before executing parallel batches
+- mailbox routing enforcement for unresolved messages and reviewer findings
+- actual security reviewer/research execution subsystem
+- multi-agent hyperplan challengers beyond checklist form
+- structured machine-checkable completion matrix artifact
+- optional AI-slop cleanup gate
+
+### Phase 3-1 Exclusions
+
+Phase 3-1 must not implement and does not enable:
+
+- per-worker worktrees (explicitly excluded and deferred)
+- OS-level or distributed locks (not implemented)
+- full OMO Team Mode (excluded)
+- raw ultrawork/ulw mode (excluded, not enabled)
+- free agent-to-agent chat (excluded)
+- runtime message broker infrastructure (not implemented)
+- no new public workflow stage is introduced; the public stage chain remains: `spec` → `worktree` → `plan` → `pre-execute-alignment` → `execute` → `final-review` → `finish`

@@ -145,6 +145,34 @@ function findAllOccurrences(text: string, pattern: RegExp): Array<{ match: strin
   return results
 }
 
+/** Strip Phase 3-1 sections from content. A Phase 3-1 section is any section
+ *  whose heading contains "phase 3-1" (case-insensitive). Sub-sections within
+ *  a Phase 3-1 section are also stripped. This allows Phase 2 scope integrity
+ *  checks to apply only to Phase 2 content, not authorized Phase 3-1 additions. */
+function stripPhase31Sections(content: string): string {
+  const lines = content.split("\n")
+  const resultLines: string[] = []
+  let skipDepth = 0
+
+  for (let i = 0; i < lines.length; i++) {
+    const headingMatch = lines[i]!.match(/^(#{1,6})\s+(.*)/)
+    if (headingMatch) {
+      const level = headingMatch[1]!.length
+      if (skipDepth > 0 && level <= skipDepth) {
+        skipDepth = 0
+      }
+      if (skipDepth === 0 && /phase\s*3.?\s*1/i.test(headingMatch[2]!)) {
+        skipDepth = level
+        continue
+      }
+    }
+    if (skipDepth > 0) continue
+    resultLines.push(lines[i]!)
+  }
+
+  return resultLines.join("\n")
+}
+
 // ---------------------------------------------------------------------------
 // Skill file paths and content (read once, original case)
 // ---------------------------------------------------------------------------
@@ -211,6 +239,12 @@ const allSkillsRaw = [
   finishSkillRaw,
   todoSyncSkillRaw,
 ].join("\n\n---\n\n")
+
+// Phase 3-1-free combined content for Phase 2 scope integrity checks.
+// Phase 3-1 sections are authorized additions to skill docs; Phase 2 scope
+// exclusion checks should not apply to them.
+const phase31FreeAllSkillsRaw = stripPhase31Sections(allSkillsRaw)
+const phase31FreeAllSkillsLower = stripPhase31Sections(allSkillsLower)
 
 // ---------------------------------------------------------------------------
 // 1. Dedicated Lifecycle Section / Table / Structured Block
@@ -1246,7 +1280,9 @@ describe("Phase 2: Phase 3/4 terms appear only in non-goal/exclusion/negative co
 
   for (const term of phase34Terms) {
     it(`Phase 3/4 term '${term.name}' — every occurrence is in non-goal/exclusion/negative context`, () => {
-      const occurrences = findAllOccurrences(allSkillsRaw, term.pattern)
+      // Use Phase 3-1-free content: Phase 3-1 sections are authorized additions
+      // that legitimately reference Phase 3 concepts like mailbox and ownership.
+      const occurrences = findAllOccurrences(phase31FreeAllSkillsRaw, term.pattern)
 
       // If the term doesn't appear at all, that's acceptable (no violation)
       if (occurrences.length === 0) return
@@ -1254,8 +1290,8 @@ describe("Phase 2: Phase 3/4 terms appear only in non-goal/exclusion/negative co
       for (let i = 0; i < occurrences.length; i++) {
         const occ = occurrences[i]!
         const start = Math.max(0, occ.index - contextWindow)
-        const end = Math.min(allSkillsRaw.length, occ.index + occ.match.length + contextWindow)
-        const surrounding = allSkillsRaw.slice(start, end).toLowerCase()
+        const end = Math.min(phase31FreeAllSkillsRaw.length, occ.index + occ.match.length + contextWindow)
+        const surrounding = phase31FreeAllSkillsRaw.slice(start, end).toLowerCase()
 
         const isNegated = /not|no|non.?goal|out\s+of\s+scope|exclud|must\s+not|do\s+not|without|absence/.test(
           surrounding,
@@ -1368,36 +1404,37 @@ describe("T06: No test fixture or helper path creates Phase 3/4 artifact directo
     "mcp-embedded",
   ]
 
-  it("skill docs do not document Phase 3/4 artifact directory creation", () => {
-    // Check that skill docs only describe Phase 2 artifact directories
-    const artifactDirPatterns = [
-      /docs\/supercode\/<work_id>\/mailbox/,
-      /docs\/supercode\/<work_id>\/ownership/,
-      /docs\/supercode\/<work_id>\/per-worker/,
-      /docs\/supercode\/<work_id>\/wiki/,
-      /docs\/supercode\/<work_id>\/ultragoal/,
-    ]
+    it("skill docs do not document Phase 3/4 artifact directory creation", () => {
+      // Check that Phase 2 content (excluding Phase 3-1 sections) does not
+      // describe Phase 3/4 artifact directories
+      const artifactDirPatterns = [
+        /docs\/supercode\/<work_id>\/mailbox/,
+        /docs\/supercode\/<work_id>\/ownership/,
+        /docs\/supercode\/<work_id>\/per-worker/,
+        /docs\/supercode\/<work_id>\/wiki/,
+        /docs\/supercode\/<work_id>\/ultragoal/,
+      ]
 
-    for (const pattern of artifactDirPatterns) {
-      expect(
-        allSkillsLower,
-        `skill docs must not document Phase 3/4 artifact directory matching ${pattern}`,
-      ).not.toMatch(pattern)
-    }
-  })
+      for (const pattern of artifactDirPatterns) {
+        expect(
+          phase31FreeAllSkillsLower,
+          `skill docs must not document Phase 3/4 artifact directory matching ${pattern}`,
+        ).not.toMatch(pattern)
+      }
+    })
 
-  it("skill docs limit artifact directory to Phase 2 artifact types only", () => {
-    // The only documented artifact directories under docs/supercode/<work_id>/
-    // should be: evidence.md, state.json, ledger.jsonl, verification/, spec.md,
-    // plan.md, and final-review.md
-    for (const forbidden of phase34Paths) {
-      const pattern = new RegExp(
-        `docs/supercode/<work_id>/${forbidden}`,
-      )
-      expect(
-        allSkillsLower,
-        `skill docs must not reference Phase 3/4 path 'docs/supercode/<work_id>/${forbidden}'`,
-      ).not.toMatch(pattern)
-    }
-  })
+    it("skill docs limit artifact directory to Phase 2 artifact types only", () => {
+      // The only documented artifact directories under docs/supercode/<work_id>/
+      // should be: evidence.md, state.json, ledger.jsonl, verification/, spec.md,
+      // plan.md, and final-review.md — in Phase 2 content (excluding Phase 3-1 sections)
+      for (const forbidden of phase34Paths) {
+        const pattern = new RegExp(
+          `docs/supercode/<work_id>/${forbidden}`,
+        )
+        expect(
+          phase31FreeAllSkillsLower,
+          `skill docs must not reference Phase 3/4 path 'docs/supercode/<work_id>/${forbidden}'`,
+        ).not.toMatch(pattern)
+      }
+    })
 })
