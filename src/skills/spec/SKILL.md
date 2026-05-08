@@ -533,3 +533,26 @@ If review repeatedly fails because evidence is missing:
 - investigate more aggressively
 - use `explorer_agent` and `librarian_agent` through `research-delegation`
 - do not hand off early
+
+---
+
+## Phase 3-1 Security Trigger Identification
+
+The `spec` stage should identify whether the requested work involves security-sensitive capabilities that may require additional security research or review during downstream stages. Security trigger discovery at spec time is bounded: it identifies trigger categories but does not require a full security audit.
+
+Trigger categories to check for during spec clarification:
+- authentication or authorization changes
+- secrets, credentials, `.env`, or token handling
+- filesystem write/delete/copy/move behavior
+- shell command execution behavior
+- git push/merge/PR/rebase/branch deletion behavior
+- network calls or external APIs
+- dependency install/update behavior
+- sandbox, worktree, permission, or path traversal behavior
+- generated code that handles untrusted input
+
+If the spec touches any of these security-sensitive areas, the spec should note it so the plan and execute stages can record appropriate security trigger evidence.
+
+### Phase 3-2 and Deferred Scope
+
+The following Phase 3 coordination capabilities are deferred to Phase 3-2 and must not be implemented as part of any spec that targets Phase 3-1 only: automatic ownership validation, conflict preflight, mailbox routing enforcement, actual security reviewer/research execution, multi-agent hyperplan, structured machine-checkable completion matrix artifact, and AI-slop cleanup gate. The spec may mention ownership, mailbox, and coordination concepts as deferred future candidates but must not treat them as implemented features.

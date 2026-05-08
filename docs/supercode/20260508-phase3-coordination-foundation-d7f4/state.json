@@ -1,0 +1,25 @@
+{
+  "work_id": "20260508-phase3-coordination-foundation-d7f4",
+  "active_stage": "final-review",
+  "active_gate_or_status": "passed",
+  "active_task": null,
+  "completed_tasks": [
+    { "task_id": "T00", "status": "completed", "verification_record_status": "verified" },
+    { "task_id": "T01", "status": "completed", "verification_record_status": "verified" },
+    { "task_id": "T02", "status": "completed", "verification_record_status": "verified" },
+    { "task_id": "T03", "status": "completed", "verification_record_status": "verified" },
+    { "task_id": "T04", "status": "completed", "verification_record_status": "verified" },
+    { "task_id": "T05", "status": "completed", "verification_record_status": "verified" },
+    { "task_id": "T06", "status": "completed", "verification_record_status": "verified" }
+  ],
+  "blockers": [],
+  "next_route": "finish",
+  "last_updated": "2026-05-08T03:45:00",
+  "alignment": {
+    "task_order": ["T00", "T01", "T02", "T03", "T04", "T05", "T06"],
+    "execution_batches": [["T00"], ["T01"], ["T02"], ["T03"], ["T04"], ["T05"], ["T06"]],
+    "max_concurrency": 1,
+    "conflict_policy": "serial execution required because tasks bootstrap shared ownership/mailbox artifacts and each task depends on prior contract outputs",
+    "verification_expectation": "each completed task must produce verification/<task_id>.json with base Phase 2 fields plus Phase 3 ownership_evidence and security_trigger_evidence or explicit not-applicable evidence"
+  }
+}

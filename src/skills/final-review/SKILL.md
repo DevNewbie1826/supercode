@@ -77,6 +77,59 @@ Before the final-review handoff, the final repository and artifact state must be
 
 ---
 
+## Phase 3-1 Final-Review Coordination Checks
+
+The final reviewer must inspect Phase 3-1 coordination artifacts as part of the final-review evidence base.
+
+### Mailbox Record Inspection
+
+- Mailbox artifact: `docs/supercode/<work_id>/mailbox.jsonl`
+- The final reviewer must check append-only mailbox records for completeness, unresolved blockers, and unaddressed reviewer findings.
+
+### Ownership Path-Coverage Check
+
+- Ownership registry: `docs/supercode/<work_id>/ownership.json`
+- The final reviewer must perform a global path-coverage check: compare fresh whole-work-item global changed-file paths against the union of exact ownership `target` paths in active ownership entries.
+- Any unowned global changed-file path (not covered) must cause final review to fail, regardless of per-task attribution.
+- The final reviewer must fail the review when global changed-file paths are unowned or not covered by ownership entries.
+
+### Ownership Evidence Adequacy
+
+- The final reviewer must inspect `ownership_evidence` in each task verification record for attribution and operation adequacy, checking `attribution_method`, `coverage_status`, and `changed_files[]` entries.
+- Any task-local or preexisting-touched file missing from `ownership_evidence.changed_files[].path` is an evidence failure.
+
+### Security Trigger Evidence Adequacy
+
+- The final reviewer must inspect `security_trigger_evidence` in each task verification record for adequacy, checking `triggered_categories`, `decision`, and `evidence_refs`.
+- Security trigger evidence must be adequate for the risk surface touched by the work item.
+
+### Strict-Completion Matrix Evidence
+
+- The final reviewer must check the strict-completion matrix evidence, verifying that each spec success criterion has evidence of satisfaction or a valid blocked/not_applicable status.
+- The strict-completion matrix ties spec success criteria to plan tasks and verification evidence using canonical statuses: `pending`, `satisfied`, `blocked`, `not_applicable`.
+
+### Read-Only and Orchestrator-Owned Path Flagging
+
+- The final reviewer must flag globally changed paths whose only matching active entries are `read_only` or `orchestrator_owned` unless `pre_registry_bootstrap` provenance or explicit orchestrator provenance explains the change.
+
+### Append-Only Bootstrap Create
+
+- The final reviewer must allow an initial file create for append-only artifacts only when the create is covered by a released bootstrap creation entry or explicit `pre_registry_bootstrap` provenance.
+
+### Ownership Failure Rules
+
+The final reviewer must fail the review when any of the following ownership violations are detected:
+
+1. **Unowned changed files**: A globally changed file path has no matching active ownership entry. Every changed file must be covered by an ownership target path.
+2. **Operation/mode conflict**: A task performed an operation that is not allowed by its ownership mode. For example, a task with `read_only` mode that modified a file, or a task with `shared_append` mode that wrote (not appended) to a file.
+3. **Missing ownership evidence**: A task verification record lacks `ownership_evidence` or has empty `changed_files[]` when the task demonstrably changed files.
+4. **Omitted changed-file entry**: A path in `task_local_changed_files` or `preexisting_changed_files_touched` is not present in `ownership_evidence.changed_files[].path`.
+5. **Read-only or orchestrator-only path modified**: A globally changed path has only `read_only` or `orchestrator_owned` matching entries without `pre_registry_bootstrap` provenance or explicit orchestrator provenance.
+
+These failures are hard workflow failures, not advisory warnings. The review must route back to `execute` with specific file paths and violation types.
+
+---
+
 ## Position in the Workflow
 
 This skill runs after:
